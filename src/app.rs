@@ -6,7 +6,7 @@ use crate::fl;
 use cosmic::app::{Command, Core};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length};
-use cosmic::widget::{self, icon, menu, nav_bar};
+use cosmic::widget::{self, Button, button, Column, Container, icon, menu, nav_bar, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 
 const REPOSITORY: &str = "https://github.com/edfloreshz/cosmic-app-template";
@@ -31,6 +31,7 @@ pub struct Yamp {
 pub enum Message {
     LaunchUrl(String),
     ToggleContextPage(ContextPage),
+    Scan,
 }
 
 /// Identifies a page in the application.
@@ -158,13 +159,29 @@ impl Application for Yamp {
     ///
     /// To get a better sense of which widgets are available, check out the `widget` module.
     fn view(&self) -> Element<Self::Message> {
-        widget::text::title1(fl!("welcome"))
+        // self.nav.text() - pass it a nav item from the model to get its text
+        // self.nav.active() - get currently active nav
+        let mut col = Column::new();
+        //if let Some(page) = self.nav.text(self.nav.active()) {
+            let txt = text(fl!("scan"));
+            let txt_container = Container::new(txt).center_x().width(Length::Fill);
+            let btn = button(txt_container).on_press(Message::Scan);
+
+            col = col.push(btn);
+        //} else {
+            //todo I guess?
+        //}
+
+        let widg = widget::text::title1(fl!("welcome"))
             .apply(widget::container)
             .width(Length::Fill)
             .height(Length::Fill)
             .align_x(Horizontal::Center)
-            .align_y(Vertical::Center)
-            .into()
+            .align_y(Vertical::Center);
+
+        col = col.push(widg);
+
+        col.into()
     }
 
     /// Application messages are handled here. The application state can be modified based on
@@ -174,6 +191,10 @@ impl Application for Yamp {
         match message {
             Message::LaunchUrl(url) => {
                 let _result = open::that_detached(url);
+            }
+
+            Message::Scan => {
+                println!("ello")
             }
 
             Message::ToggleContextPage(context_page) => {
@@ -208,7 +229,6 @@ impl Application for Yamp {
     fn on_nav_select(&mut self, id: nav_bar::Id) -> Command<Self::Message> {
         // Activate the page in the model.
         self.nav.activate(id);
-
         self.update_titles()
     }
 }
