@@ -13,7 +13,7 @@ const REPOSITORY: &str = "https://github.com/edfloreshz/cosmic-app-template";
 
 /// This is the struct that represents your application.
 /// It is used to define the data that will be used by your application.
-pub struct YourApp {
+pub struct Yamp {
     /// Application state which is managed by the COSMIC runtime.
     core: Core,
     /// Display a context drawer with the designated page if defined.
@@ -78,7 +78,7 @@ impl menu::action::MenuAction for MenuAction {
 /// - `Flags` is the data that your application needs to use before it starts.
 /// - `Message` is the enum that contains all the possible variants that your application will need to transmit messages.
 /// - `APP_ID` is the unique identifier of your application.
-impl Application for YourApp {
+impl Application for Yamp {
     type Executor = cosmic::executor::Default;
 
     type Flags = ();
@@ -126,7 +126,7 @@ impl Application for YourApp {
             .data::<Page>(Page::Page3)
             .icon(icon::from_name("applications-games-symbolic"));
 
-        let mut app = YourApp {
+        let mut app = Yamp {
             core,
             context_page: ContextPage::default(),
             key_binds: HashMap::new(),
@@ -213,7 +213,7 @@ impl Application for YourApp {
     }
 }
 
-impl YourApp {
+impl Yamp {
     /// The about page for this app.
     pub fn about(&self) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;

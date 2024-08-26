@@ -1,4 +1,4 @@
-app-title = COSMIC App Template
+app-title = YAMP
 about = About
 view = View
-welcome = Welcome to COSMIC! ✨
+welcome = Welcome to YAMP! 🎷
