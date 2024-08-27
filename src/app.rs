@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use std::path::PathBuf;
 use std::collections::HashMap;
 
 use crate::fl;
+use std::fs;
 use cosmic::app::{Command, Core};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length};
-use cosmic::widget::{self, Button, button, Column, Container, icon, menu, nav_bar, text};
+use cosmic::widget::{self, button, Column, Container, icon, menu, nav_bar, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 
 const REPOSITORY: &str = "https://github.com/edfloreshz/cosmic-app-template";
@@ -22,6 +24,8 @@ pub struct Yamp {
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     /// A model that contains all of the pages assigned to the nav bar panel.
     nav: nav_bar::Model,
+    /// A vector that contains the list of scanned files
+    scanned_files: Vec<PathBuf>,
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -127,11 +131,14 @@ impl Application for Yamp {
             .data::<Page>(Page::Page3)
             .icon(icon::from_name("applications-games-symbolic"));
 
+        let scanned_files = vec![];
+
         let mut app = Yamp {
             core,
             context_page: ContextPage::default(),
             key_binds: HashMap::new(),
             nav,
+            scanned_files
         };
 
         let command = app.update_titles();
@@ -172,6 +179,16 @@ impl Application for Yamp {
             //todo I guess?
         //}
 
+        // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
+        for file in &self.scanned_files {
+            println!("Name: {}", file.display());
+            println!("hol up: {}", file.display());
+            let file_txt = text(file.display().to_string());
+            let file_txt_container = Container::new(file_txt).center_x().width(Length::Fill);
+
+            col = col.push(file_txt_container);
+        }
+
         let widg = widget::text::title1(fl!("welcome"))
             .apply(widget::container)
             .width(Length::Fill)
@@ -194,7 +211,16 @@ impl Application for Yamp {
             }
 
             Message::Scan => {
-                println!("ello")
+                let paths = fs::read_dir("./").unwrap();
+
+                for path in paths {
+                    //println!("Name: {}", path.unwrap().path().display());
+                    self.scanned_files.push(path.unwrap().path());
+                }
+
+                // for file in &self.scanned_files {
+                //     println!("Name: {}", file.display());
+                // }
             }
 
             Message::ToggleContextPage(context_page) => {
