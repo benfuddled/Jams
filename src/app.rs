@@ -13,6 +13,12 @@ use cosmic::widget::{self, button, Column, Container, icon, menu, nav_bar, text}
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use log::error;
 
+use std::fs::File;
+use std::io::BufReader;
+use std::time::Duration;
+use rodio::{Decoder, OutputStream, Sink, source::Source};
+use rodio::source::SineWave;
+
 const REPOSITORY: &str = "https://github.com/edfloreshz/cosmic-app-template";
 
 /// This is the struct that represents your application.
@@ -234,15 +240,33 @@ impl Application for Yamp {
             }
 
             Message::Play => {
+
+                // _stream must live as long as the sink
                 thread::spawn(|| {
-                    let code = match player::gobbo() {
-                        Ok(code) => code,
-                        Err(err) => {
-                            error!("{}", err.to_string().to_lowercase());
-                            -1
-                        }
-                    };
+                    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+                    let sink = Sink::try_new(&stream_handle).unwrap();
+                    // Add a dummy source of the sake of the example.
+                    // Load a sound from a file, using a path relative to Cargo.toml
+                    let file = BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
+                    // Decode that sound file into a source
+                    let source = Decoder::new(file).unwrap();
+                    sink.append(source);
+                    // The sound plays in a separate thread. This call will block the current thread until the sink
+                    // has finished playing all its queued sounds.
+                    sink.sleep_until_end();
                 });
+
+
+                // symphonia playback
+                // thread::spawn(|| {
+                //     let code = match player::gobbo() {
+                //         Ok(code) => code,
+                //         Err(err) => {
+                //             error!("{}", err.to_string().to_lowercase());
+                //             -1
+                //         }
+                //     };
+                // });
             }
 
             Message::ToggleContextPage(context_page) => {
