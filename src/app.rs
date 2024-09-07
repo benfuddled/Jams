@@ -2,14 +2,16 @@
 
 use std::path::PathBuf;
 use std::collections::HashMap;
+use std::thread;
 
-use crate::fl;
+use crate::{fl, player};
 use std::fs;
 use cosmic::app::{Command, Core};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length};
 use cosmic::widget::{self, button, Column, Container, icon, menu, nav_bar, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
+use log::error;
 
 const REPOSITORY: &str = "https://github.com/edfloreshz/cosmic-app-template";
 
@@ -140,6 +142,17 @@ impl Application for Yamp {
             nav,
             scanned_files
         };
+
+        thread::spawn(|| {
+            let code = match player::gobbo() {
+                Ok(code) => code,
+                Err(err) => {
+                    error!("{}", err.to_string().to_lowercase());
+                    -1
+                }
+            };
+        });
+
 
         let command = app.update_titles();
 
