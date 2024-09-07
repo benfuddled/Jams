@@ -38,6 +38,7 @@ pub enum Message {
     LaunchUrl(String),
     ToggleContextPage(ContextPage),
     Scan,
+    Play
 }
 
 /// Identifies a page in the application.
@@ -143,16 +144,6 @@ impl Application for Yamp {
             scanned_files
         };
 
-        thread::spawn(|| {
-            let code = match player::gobbo() {
-                Ok(code) => code,
-                Err(err) => {
-                    error!("{}", err.to_string().to_lowercase());
-                    -1
-                }
-            };
-        });
-
 
         let command = app.update_titles();
 
@@ -191,6 +182,12 @@ impl Application for Yamp {
         //} else {
             //todo I guess?
         //}
+
+        let txt_play = text(fl!("play"));
+        let txt_play_container = Container::new(txt_play).center_x().width(Length::Fill);
+        let btn_play = button(txt_play_container).on_press(Message::Play);
+
+        col = col.push(btn_play);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         for file in &self.scanned_files {
@@ -234,6 +231,18 @@ impl Application for Yamp {
                 // for file in &self.scanned_files {
                 //     println!("Name: {}", file.display());
                 // }
+            }
+
+            Message::Play => {
+                thread::spawn(|| {
+                    let code = match player::gobbo() {
+                        Ok(code) => code,
+                        Err(err) => {
+                            error!("{}", err.to_string().to_lowercase());
+                            -1
+                        }
+                    };
+                });
             }
 
             Message::ToggleContextPage(context_page) => {
