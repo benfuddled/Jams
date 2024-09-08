@@ -43,7 +43,8 @@ pub struct Yamp {
 pub struct RodioAudioPlayer {
     /// The sink responsible for managing the audio playback.
     player: rodio::Sink,
-    /// Keep OutputStream alive
+    /// Keep OutputStream alive. Otherwise audio playback will NOT work
+    /// (sorry I don't make the rules)
     _stream: rodio::OutputStream,
     /// Store content for rewind/replay
     content: Vec<u8>,
@@ -307,6 +308,7 @@ impl Application for Yamp {
                 // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
                 // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
                 // (_STREAM IS A FIELD IN THIS STRUCT)
+                // (tested without the _stream field and audio didn't work jsyk)
                 // SLEEP UNTIL END IS COMPLETELY UNNECESSARY IN THIS CASE BECAUSE
                 // LIBCOSMIC KEEPS THE MAIN THREAD ALIVE
                 // AND I DON'T HAVE TO MAKE A SECOND THREAD BECAUSE RODIO IS ALREADY DOING THAT
