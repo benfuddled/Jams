@@ -15,6 +15,7 @@ use log::error;
 
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::Arc;
 use std::time::Duration;
 use rodio::{Decoder, OutputStream, Sink, source::Source};
 use rodio::source::SineWave;
@@ -34,6 +35,18 @@ pub struct Yamp {
     nav: nav_bar::Model,
     /// A vector that contains the list of scanned files
     scanned_files: Vec<PathBuf>,
+    thing: Arc<i32>,
+    audio_player: RodioAudioPlayer
+}
+
+/// The AudioPlayer struct handles audio playback using the rodio backend.
+pub struct RodioAudioPlayer {
+    /// The sink responsible for managing the audio playback.
+    player: rodio::Sink,
+    /// Keep OutputStream alive
+    _stream: rodio::OutputStream,
+    /// Store content for rewind/replay
+    content: Vec<u8>,
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -142,12 +155,26 @@ impl Application for Yamp {
 
         let scanned_files = vec![];
 
+        let thing = Arc::new(5);
+
+        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+        let player = Sink::try_new(&stream_handle).unwrap();
+        let mut content = Vec::new();
+
+        let mut audio_player = RodioAudioPlayer {
+            player,
+            _stream,
+            content
+        };
+
         let mut app = Yamp {
             core,
             context_page: ContextPage::default(),
             key_binds: HashMap::new(),
             nav,
-            scanned_files
+            scanned_files,
+            thing,
+            audio_player
         };
 
 
@@ -234,6 +261,8 @@ impl Application for Yamp {
                     self.scanned_files.push(path.unwrap().path());
                 }
 
+                self.audio_player.player.pause();
+
                 // for file in &self.scanned_files {
                 //     println!("Name: {}", file.display());
                 // }
@@ -241,20 +270,58 @@ impl Application for Yamp {
 
             Message::Play => {
 
+               // let sinker = Arc::clone(&sink_ultimate);
+               //
+               //  let thing_ult = Arc::new(5);
+               //  let thing = Arc::clone(&thing_ult);
+
                 // _stream must live as long as the sink
-                thread::spawn(|| {
-                    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-                    let sink = Sink::try_new(&stream_handle).unwrap();
-                    // Add a dummy source of the sake of the example.
-                    // Load a sound from a file, using a path relative to Cargo.toml
-                    let file = BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
-                    // Decode that sound file into a source
-                    let source = Decoder::new(file).unwrap();
-                    sink.append(source);
-                    // The sound plays in a separate thread. This call will block the current thread until the sink
-                    // has finished playing all its queued sounds.
-                    sink.sleep_until_end();
-                });
+                // let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+                // let sink_ultimate = Arc::new(Sink::try_new(&stream_handle).unwrap());
+                // let sinker_ultimate = Arc::clone(&sink_ultimate);
+
+                // let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+                // let sinker_ultimate = Sink::try_new(&stream_handle).unwrap();
+
+                // for some reason moving ownership of the sink into another thread (using Arc
+                // or not) the sound doesn't play and anything after sleep_until_end doesn't trigger.
+
+                // https://doc.rust-lang.org/book/ch13-01-closures.html
+                // let handle = thread::spawn(move || {
+                //     // Load a sound from a file, using a path relative to Cargo.toml
+                //     let file = BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
+                //     // Decode that sound file into a source
+                //     let source = Decoder::new(file).unwrap();
+                //     sinker_ultimate.append(source);
+                //     println!("from thread1 {}", thing);
+                //     // // The sound plays in a separate thread. This call will block the current thread until the sink
+                //     // // has finished playing all its queued sounds.
+                //     sinker_ultimate.sleep_until_end();
+                //     println!("from thread2 {}", thing);
+                // });
+
+                let file = BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
+
+                let source = Decoder::new(file).unwrap();
+
+                // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
+                // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
+                // (_STREAM IS A FIELD IN THIS STRUCT)
+                // SLEEP UNTIL END IS COMPLETELY UNNECESSARY IN THIS CASE BECAUSE
+                // LIBCOSMIC KEEPS THE MAIN THREAD ALIVE
+                // AND I DON'T HAVE TO MAKE A SECOND THREAD BECAUSE RODIO IS ALREADY DOING THAT
+                // IN THE BACKGROUND
+                // HOLY SMOKES
+                self.audio_player.player.append(source);
+                // WHEN YOU APPEND A SOURCE TO THE PLAYER IT IMMEDIATELY STARTS PLAYING
+                // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
+                // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
+                self.audio_player.player.play();
+                //self.audio_player.player.sleep_until_end();
+
+                println!("{}", self.thing);
+
+                //handle.join().unwrap();
 
 
                 // symphonia playback
