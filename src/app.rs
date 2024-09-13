@@ -20,6 +20,14 @@ use std::time::Duration;
 use rodio::{Decoder, OutputStream, Sink, source::Source};
 use rodio::source::SineWave;
 
+// use cosmic_files::{
+//     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
+//     mime_icon::{mime_for_path, mime_icon},
+// };
+
+use cosmic::dialog::file_chooser::{self, FileFilter};
+use url::Url;
+
 const REPOSITORY: &str = "https://github.com/edfloreshz/cosmic-app-template";
 
 /// This is the struct that represents your application.
@@ -58,7 +66,14 @@ pub enum Message {
     LaunchUrl(String),
     ToggleContextPage(ContextPage),
     Scan,
-    Play
+    Play,
+    Cancelled,
+    CloseError,
+    Error(String),
+    FileRead(Url, String),
+    OpenError(Arc<file_chooser::Error>),
+    OpenFile,
+    Selected(Url),
 }
 
 /// Identifies a page in the application.
@@ -217,6 +232,12 @@ impl Application for Yamp {
             //todo I guess?
         //}
 
+        let txt_open = text(fl!("get-files"));
+        let txt_open_container = Container::new(txt_open).center_x().width(Length::Fill);
+        let btn_open = button(txt_open_container).on_press(Message::OpenFile);
+
+        col = col.push(btn_open);
+
         let txt_play = text(fl!("play"));
         let txt_play_container = Container::new(txt_play).center_x().width(Length::Fill);
         let btn_play = button(txt_play_container).on_press(Message::Play);
@@ -268,6 +289,132 @@ impl Application for Yamp {
                 //     println!("Name: {}", file.display());
                 // }
             }
+
+            // Via cosmic-edit
+            // Message::OpenFileDialog => {
+            //     if self.dialog_opt.is_none() {
+            //         let (dialog, command) = Dialog::new(
+            //             DialogKind::OpenMultipleFiles,
+            //             None,
+            //             Message::DialogMessage,
+            //             Message::OpenFileResult,
+            //         );
+            //         self.dialog_opt = Some(dialog);
+            //         return command;
+            //     }
+            // }
+            //
+            // Message::OpenProjectDialog => {
+            //     if self.dialog_opt.is_none() {
+            //         let (dialog, command) = Dialog::new(
+            //             DialogKind::OpenMultipleFolders,
+            //             None,
+            //             Message::DialogMessage,
+            //             Message::OpenProjectResult,
+            //         );
+            //         self.dialog_opt = Some(dialog);
+            //         return command;
+            //     }
+            // }
+
+            // Creates a new open dialog.
+            // https://github.com/pop-os/libcosmic/blob/master/examples/open-dialog/src/main.rs
+            Message::OpenFile => {
+                return cosmic::command::future(async move {
+                    eprintln!("opening new dialog");
+
+                    #[cfg(feature = "rfd")]
+                    let filter = FileFilter::new("Text files").extension("txt");
+
+                    #[cfg(feature = "xdg-portal")]
+                    let filter = FileFilter::new("Text files").glob("*.txt");
+
+                    let dialog = file_chooser::open::Dialog::new()
+                        // Sets title of the dialog window.
+                        .title("Choose a file")
+                        // Accept only plain text files
+                        .filter(filter);
+
+                    match dialog.open_file().await {
+                        Ok(response) => Message::Selected(response.url().to_owned()),
+
+                        Err(file_chooser::Error::Cancelled) => Message::Cancelled,
+
+                        Err(why) => Message::OpenError(Arc::new(why)),
+                    }
+                });
+            }
+
+            // Displays an error in the application's warning bar.
+            Message::Error(why) => {
+                //self.error_status = Some(why);
+            }
+
+            // Displays an error in the application's warning bar.
+            Message::OpenError(why) => {
+                // if let Some(why) = Arc::into_inner(why) {
+                //     let mut source: &dyn std::error::Error = &why;
+                //     let mut string =
+                //         format!("open dialog subscription errored\n    cause: {source}");
+                //
+                //     while let Some(new_source) = source.source() {
+                //         string.push_str(&format!("\n    cause: {new_source}"));
+                //         source = new_source;
+                //     }
+                //
+                //     self.error_status = Some(string);
+                // }
+            }
+
+            Message::Cancelled => {}
+            Message::CloseError => {}
+            Message::FileRead(_, _) => {}
+
+            Message::Selected(url) => {
+                eprintln!("selected file");
+                //
+                // // Take existing file contents buffer to reuse its allocation.
+                // let mut contents = String::new();
+                // std::mem::swap(&mut contents, &mut self.file_contents);
+                //
+                // // Set the file's URL as the application title.
+                // self.set_header_title(url.to_string());
+                //
+                // // Reads the selected file into memory.
+                // return cosmic::command::future(async move {
+                //     // Check if its a valid local file path.
+                //     let path = match url.scheme() {
+                //         "file" => url.to_file_path().unwrap(),
+                //         other => {
+                //             return Message::Error(format!("{url} has unknown scheme: {other}"));
+                //         }
+                //     };
+                //
+                //     // Open the file by its path.
+                //     let mut file = match tokio::fs::File::open(&path).await {
+                //         Ok(file) => file,
+                //         Err(why) => {
+                //             return Message::Error(format!(
+                //                 "failed to open {}: {why}",
+                //                 path.display()
+                //             ));
+                //         }
+                //     };
+                //
+                //     // Read the file into our contents buffer.
+                //     contents.clear();
+                //
+                //     if let Err(why) = file.read_to_string(&mut contents).await {
+                //         return Message::Error(format!("failed to read {}: {why}", path.display()));
+                //     }
+                //
+                //     contents.shrink_to_fit();
+                //
+                //     // Send this back to the application.
+                //     Message::FileRead(url, contents)
+                // });
+            }
+
 
             Message::Play => {
 

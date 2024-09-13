@@ -5,3 +5,4 @@ welcome = Welcome to YAMP! 🎷
 page-2-description = This is page 2.
 scan = gimme the files
 play = play that music
+get-files = open file picker
