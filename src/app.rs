@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::thread;
 
@@ -324,10 +324,10 @@ impl Application for Yamp {
                     eprintln!("opening new dialog");
 
                     #[cfg(feature = "rfd")]
-                    let filter = FileFilter::new("Text files").extension("txt");
+                    let filter = FileFilter::new("Music files").extension("mp3");
 
                     #[cfg(feature = "xdg-portal")]
-                    let filter = FileFilter::new("Text files").glob("*.txt");
+                    let filter = FileFilter::new("Music files").glob("*.mp3");
 
                     let dialog = file_chooser::open::Dialog::new()
                         // Sets title of the dialog window.
@@ -413,6 +413,29 @@ impl Application for Yamp {
                 //     // Send this back to the application.
                 //     Message::FileRead(url, contents)
                 // });
+
+                println!("{}", url.as_str());
+                println!("{:?}", url.to_file_path().unwrap());
+                println!("{}", Path::new(url.as_str()).is_file());
+
+                let file = BufReader::new(File::open(url.to_file_path().unwrap()).unwrap());
+
+                let source = Decoder::new(file).unwrap();
+
+                // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
+                // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
+                // (_STREAM IS A FIELD IN THIS STRUCT)
+                // (tested without the _stream field and audio didn't work jsyk)
+                // SLEEP UNTIL END IS COMPLETELY UNNECESSARY IN THIS CASE BECAUSE
+                // LIBCOSMIC KEEPS THE MAIN THREAD ALIVE
+                // AND I DON'T HAVE TO MAKE A SECOND THREAD BECAUSE RODIO IS ALREADY DOING THAT
+                // IN THE BACKGROUND
+                // HOLY SMOKES
+                self.audio_player.player.append(source);
+                // WHEN YOU APPEND A SOURCE TO THE PLAYER IT IMMEDIATELY STARTS PLAYING
+                // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
+                // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
+                self.audio_player.player.play();
             }
 
 
