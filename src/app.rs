@@ -101,6 +101,8 @@ impl ContextPage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuAction {
     About,
+    Play,
+    Scan,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -109,6 +111,8 @@ impl menu::action::MenuAction for MenuAction {
     fn message(&self) -> Self::Message {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
+            MenuAction::Play => { Message::Play }
+            MenuAction::Scan => { Message::Scan }
         }
     }
 }
@@ -207,7 +211,17 @@ impl Application for Yamp {
                 &self.key_binds,
                 vec![menu::Item::Button(fl!("about"), MenuAction::About)],
             ),
-        )]);
+        ),
+            menu::Tree::with_children(
+                menu::root(fl!("debug")),
+                menu::items(
+                    &self.key_binds,
+                    vec![menu::Item::Button(fl!("debug-play"), MenuAction::Play),
+                         menu::Item::Button(fl!("debug-file-listing"), MenuAction::Scan)],
+                ),
+            )
+
+        ]);
 
         vec![menu_bar.into()]
     }
@@ -222,15 +236,17 @@ impl Application for Yamp {
         // self.nav.text() - pass it a nav item from the model to get its text
         // self.nav.active() - get currently active nav
         let mut col = Column::new();
-        //if let Some(page) = self.nav.text(self.nav.active()) {
-            let txt = text(fl!("scan"));
-            let txt_container = Container::new(txt).center_x().width(Length::Fill);
-            let btn = button(txt_container).on_press(Message::Scan);
 
-            col = col.push(btn);
-        //} else {
-            //todo I guess?
-        //}
+        // MOVED IN TO DEBUG MENU
+        // //if let Some(page) = self.nav.text(self.nav.active()) {
+        //     let txt = text(fl!("scan"));
+        //     let txt_container = Container::new(txt).center_x().width(Length::Fill);
+        //     let btn = button(txt_container).on_press(Message::Scan);
+        //
+        //     col = col.push(btn);
+        // //} else {
+        //     //todo I guess?
+        // //}
 
         let txt_open = text(fl!("get-files"));
         let txt_open_container = Container::new(txt_open).center_x().width(Length::Fill);
@@ -238,11 +254,12 @@ impl Application for Yamp {
 
         col = col.push(btn_open);
 
-        let txt_play = text(fl!("play"));
-        let txt_play_container = Container::new(txt_play).center_x().width(Length::Fill);
-        let btn_play = button(txt_play_container).on_press(Message::Play);
-
-        col = col.push(btn_play);
+        // MOVED IN TO DEBUG MENU
+        // let txt_play = text(fl!("play"));
+        // let txt_play_container = Container::new(txt_play).center_x().width(Length::Fill);
+        // let btn_play = button(txt_play_container).on_press(Message::Play);
+        //
+        // col = col.push(btn_play);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         for file in &self.scanned_files {

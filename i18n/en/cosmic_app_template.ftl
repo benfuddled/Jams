@@ -6,3 +6,6 @@ page-2-description = This is page 2.
 scan = gimme the files
 play = play that music
 get-files = open file picker
+debug = Debug
+debug-play = Play Sample File
+debug-file-listing = List Files From Dir
