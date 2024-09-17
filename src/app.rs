@@ -103,6 +103,7 @@ pub enum MenuAction {
     About,
     Play,
     Scan,
+    OpenFile,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -113,6 +114,7 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
             MenuAction::Play => { Message::Play }
             MenuAction::Scan => { Message::Scan }
+            MenuAction::OpenFile => { Message::OpenFile }
         }
     }
 }
@@ -217,7 +219,8 @@ impl Application for Yamp {
                 menu::items(
                     &self.key_binds,
                     vec![menu::Item::Button(fl!("debug-play"), MenuAction::Play),
-                         menu::Item::Button(fl!("debug-file-listing"), MenuAction::Scan)],
+                         menu::Item::Button(fl!("debug-file-listing"), MenuAction::Scan),
+                         menu::Item::Button(fl!("debug-file-play"), MenuAction::OpenFile)],
                 ),
             )
 
@@ -248,11 +251,11 @@ impl Application for Yamp {
         //     //todo I guess?
         // //}
 
-        let txt_open = text(fl!("get-files"));
-        let txt_open_container = Container::new(txt_open).center_x().width(Length::Fill);
-        let btn_open = button(txt_open_container).on_press(Message::OpenFile);
-
-        col = col.push(btn_open);
+        // let txt_open = text(fl!("get-files"));
+        // let txt_open_container = Container::new(txt_open).center_x().width(Length::Fill);
+        // let btn_open = button(txt_open_container).on_press(Message::OpenFile);
+        //
+        // col = col.push(btn_open);
 
         // MOVED IN TO DEBUG MENU
         // let txt_play = text(fl!("play"));
@@ -361,6 +364,25 @@ impl Application for Yamp {
                     }
                 });
             }
+
+            // left off with these two
+            // Message::OpenFolder => {
+            //     return cosmic::command::future(async move {
+            //     let dialog = file_chooser::open::Dialog::new().title("Choose a library location");
+            //
+            //     match dialog.open_folder().await {
+            //         Ok(response) => Message::Selected(response.url().to_owned()),
+            //
+            //         Err(file_chooser::Error::Cancelled) => Message::Cancelled,
+            //
+            //         Err(why) => Message::OpenError(Arc::new(why)),
+            //     }
+            //     });
+            // }
+            //
+            // Message::FolderSelected(url) => {
+            //     println!("{:?}", url.to_file_path().unwrap());
+            // }
 
             // Displays an error in the application's warning bar.
             Message::Error(why) => {

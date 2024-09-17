@@ -9,3 +9,4 @@ get-files = open file picker
 debug = Debug
 debug-play = Play Sample File
 debug-file-listing = List Files From Dir
+debug-file-play = Open File And Play
