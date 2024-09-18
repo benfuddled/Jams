@@ -9,7 +9,7 @@ use std::fs;
 use cosmic::app::{Command, Core};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length};
-use cosmic::widget::{self, button, Column, Container, icon, menu, nav_bar, text};
+use cosmic::widget::{self, button, Column, Container, icon, menu, nav_bar, Row, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use log::error;
 
@@ -160,7 +160,7 @@ impl Application for Yamp {
         let mut nav = nav_bar::Model::default();
 
         nav.insert()
-            .text("Page 1")
+            .text("All Music")
             .data::<Page>(Page::Page1)
             .icon(icon::from_name("applications-science-symbolic"))
             .activate();
@@ -240,48 +240,53 @@ impl Application for Yamp {
         // self.nav.active() - get currently active nav
         let mut col = Column::new();
 
-        // MOVED IN TO DEBUG MENU
-        // //if let Some(page) = self.nav.text(self.nav.active()) {
-        //     let txt = text(fl!("scan"));
-        //     let txt_container = Container::new(txt).center_x().width(Length::Fill);
-        //     let btn = button(txt_container).on_press(Message::Scan);
-        //
-        //     col = col.push(btn);
-        // //} else {
-        //     //todo I guess?
-        // //}
-
-        // let txt_open = text(fl!("get-files"));
-        // let txt_open_container = Container::new(txt_open).center_x().width(Length::Fill);
-        // let btn_open = button(txt_open_container).on_press(Message::OpenFile);
-        //
-        // col = col.push(btn_open);
-
-        // MOVED IN TO DEBUG MENU
-        // let txt_play = text(fl!("play"));
-        // let txt_play_container = Container::new(txt_play).center_x().width(Length::Fill);
-        // let btn_play = button(txt_play_container).on_press(Message::Play);
-        //
-        // col = col.push(btn_play);
-
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
-        for file in &self.scanned_files {
-            println!("Name: {}", file.display());
-            println!("hol up: {}", file.display());
-            let file_txt = text(file.display().to_string());
-            let file_txt_container = Container::new(file_txt).center_x().width(Length::Fill);
+        // for file in &self.scanned_files {
+        //     println!("Name: {}", file.display());
+        //     println!("hol up: {}", file.display());
+        //     let file_txt = text(file.display().to_string());
+        //     let file_txt_container = Container::new(file_txt).center_x().width(Length::Fill);
+        //
+        //     col = col.push(file_txt_container);
+        // }
 
-            col = col.push(file_txt_container);
-        }
+        let mut splash_screen = Column::new()
+            .align_items(Alignment::Center)
+            .spacing(15);
 
-        let widg = widget::text::title1(fl!("welcome"))
+        let title = widget::text::title1(fl!("welcome"))
             .apply(widget::container)
+            .padding(0)
             .width(Length::Fill)
-            .height(Length::Fill)
             .align_x(Horizontal::Center)
             .align_y(Vertical::Center);
 
-        col = col.push(widg);
+        let subtitle = text::title2(fl!("spelled-out")).size(16);
+
+        let mut titles = Column::new()
+            .align_items(Alignment::Center);
+
+        titles = titles.push(title);
+        titles = titles.push(subtitle);
+
+        splash_screen = splash_screen.push(titles);
+
+        let txt_open = text(fl!("add-folder")).size(20);
+        let txt_open_container = Container::new(txt_open).center_x();
+        let btn_open = button(txt_open_container)
+            .padding([8, 18])
+            .on_press(Message::OpenFile);
+
+        splash_screen = splash_screen.push(btn_open);
+
+        let mut splash_screen_container = Row::new()
+            .align_items(Alignment::Center)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        splash_screen_container = splash_screen_container.push(splash_screen);
+
+        col = col.push(splash_screen_container);
 
         col.into()
     }
