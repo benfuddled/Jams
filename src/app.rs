@@ -65,9 +65,11 @@ pub struct RodioAudioPlayer {
     content: Vec<u8>,
 }
 
+#[derive(Clone, Debug)]
 pub struct MusicFile {
     saved_path: PathBuf,
-    metadata: MetadataRevision
+    metadata: MetadataRevision,
+    playing: bool,
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -88,6 +90,7 @@ pub enum Message {
     Selected(Url),
     AddFolder,
     AddSongsToLibrary(Url),
+    StartPlayingNewTrack(PathBuf),
 }
 
 /// Identifies a page in the application.
@@ -270,9 +273,22 @@ impl Application for Yamp {
                             let title = tag.value.to_string();
                             println!("{}", &tag.value);
                             let file_txt = text(title);
-                            let file_txt_container = Container::new(file_txt).width(Length::Fill);
+                            //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
 
-                            col = col.push(file_txt_container);
+                            let mut file_txt_row = Row::new();
+                            file_txt_row = file_txt_row.push(file_txt);
+
+                            if (file.playing == true) {
+                                let playing_txt = text("Pause");
+                                let button = button(playing_txt);
+                                file_txt_row = file_txt_row.push(button);
+                            } else {
+                                let paused_txt = text("Play");
+                                let button = button(paused_txt).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
+                                file_txt_row = file_txt_row.push(button);
+                            }
+
+                            col = col.push(file_txt_row);
                         }
                         //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
                     }
@@ -409,9 +425,10 @@ impl Application for Yamp {
 
                                 let metadata = metadata_rev.clone();
 
-                                let music_file = MusicFile {
+                                let mut music_file = MusicFile {
                                     saved_path,
-                                    metadata
+                                    metadata,
+                                    playing: false
                                 };
 
                                 self.scanned_files.push(music_file);
@@ -430,7 +447,8 @@ impl Application for Yamp {
 
                                 let music_file = MusicFile {
                                     saved_path,
-                                    metadata
+                                    metadata,
+                                    playing: false
                                 };
 
                                 self.scanned_files.push(music_file);
@@ -443,6 +461,38 @@ impl Application for Yamp {
                         }
                     }
                 }
+            }
+
+            Message::StartPlayingNewTrack(file_path) => {
+
+                self.audio_player.player.stop();
+
+                for file in &mut self.scanned_files {
+                    if (file.saved_path == file_path) {
+                        file.playing = true;
+                    } else {
+                        file.playing = false;
+                    }
+                }
+
+                let file = BufReader::new(File::open(file_path).unwrap());
+
+                let source = Decoder::new(file).unwrap();
+
+                // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
+                // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
+                // (_STREAM IS A FIELD IN THIS STRUCT)
+                // (tested without the _stream field and audio didn't work jsyk)
+                // SLEEP UNTIL END IS COMPLETELY UNNECESSARY IN THIS CASE BECAUSE
+                // LIBCOSMIC KEEPS THE MAIN THREAD ALIVE
+                // AND I DON'T HAVE TO MAKE A SECOND THREAD BECAUSE RODIO IS ALREADY DOING THAT
+                // IN THE BACKGROUND
+                // HOLY SMOKES
+                self.audio_player.player.append(source);
+                // WHEN YOU APPEND A SOURCE TO THE PLAYER IT IMMEDIATELY STARTS PLAYING
+                // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
+                // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
+                self.audio_player.player.play();
             }
 
 
