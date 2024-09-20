@@ -11,6 +11,7 @@ use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length};
 use cosmic::widget::{self, button, Column, Container, icon, menu, nav_bar, Row, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
+use cosmic::iced_core;
 use log::error;
 
 use std::fs::File;
@@ -65,7 +66,7 @@ pub struct RodioAudioPlayer {
 pub enum Message {
     LaunchUrl(String),
     ToggleContextPage(ContextPage),
-    Scan,
+    DebugScan,
     Play,
     Cancelled,
     CloseError,
@@ -74,6 +75,8 @@ pub enum Message {
     OpenError(Arc<file_chooser::Error>),
     OpenFile,
     Selected(Url),
+    AddFolder,
+    AddSongsToLibrary(Url),
 }
 
 /// Identifies a page in the application.
@@ -102,7 +105,7 @@ impl ContextPage {
 pub enum MenuAction {
     About,
     Play,
-    Scan,
+    DebugScan,
     OpenFile,
 }
 
@@ -113,7 +116,7 @@ impl menu::action::MenuAction for MenuAction {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
             MenuAction::Play => { Message::Play }
-            MenuAction::Scan => { Message::Scan }
+            MenuAction::DebugScan => { Message::DebugScan }
             MenuAction::OpenFile => { Message::OpenFile }
         }
     }
@@ -219,7 +222,7 @@ impl Application for Yamp {
                 menu::items(
                     &self.key_binds,
                     vec![menu::Item::Button(fl!("debug-play"), MenuAction::Play),
-                         menu::Item::Button(fl!("debug-file-listing"), MenuAction::Scan),
+                         menu::Item::Button(fl!("debug-file-listing"), MenuAction::DebugScan),
                          menu::Item::Button(fl!("debug-file-play"), MenuAction::OpenFile)],
                 ),
             )
@@ -240,53 +243,58 @@ impl Application for Yamp {
         // self.nav.active() - get currently active nav
         let mut col = Column::new();
 
-        // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
-        // for file in &self.scanned_files {
-        //     println!("Name: {}", file.display());
-        //     println!("hol up: {}", file.display());
-        //     let file_txt = text(file.display().to_string());
-        //     let file_txt_container = Container::new(file_txt).center_x().width(Length::Fill);
-        //
-        //     col = col.push(file_txt_container);
-        // }
+       // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
+        if (&self.scanned_files.len() > &0) {
+            for file in &self.scanned_files {
+                println!("Name: {}", file.display());
+                let file_txt = text(file.display().to_string());
+                let file_txt_container = Container::new(file_txt).width(Length::Fill);
 
-        let mut splash_screen = Column::new()
-            .align_items(Alignment::Center)
-            .spacing(15);
+                col = col.push(file_txt_container);
+            }
+        } else {
+            let mut splash_screen = Column::new()
+                .align_items(Alignment::Center)
+                .spacing(15);
 
-        let title = widget::text::title1(fl!("welcome"))
-            .apply(widget::container)
-            .padding(0)
-            .width(Length::Fill)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center);
+            let title = widget::text::title1(fl!("welcome"))
+                .size(48)
+                .apply(widget::container)
+                .padding(0)
+                .width(Length::Fill)
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Center);
 
-        let subtitle = text::title2(fl!("spelled-out")).size(16);
+            let subtitle = text::title2(fl!("spelled-out"))
+                .size(18)
+                .font(cosmic::font::FONT_MONO_REGULAR)
+                .line_height(cosmic::iced_core::text::LineHeight::Relative(2.5));
 
-        let mut titles = Column::new()
-            .align_items(Alignment::Center);
+            let mut titles = Column::new()
+                .align_items(Alignment::Center);
 
-        titles = titles.push(title);
-        titles = titles.push(subtitle);
+            titles = titles.push(title);
+            titles = titles.push(subtitle);
 
-        splash_screen = splash_screen.push(titles);
+            splash_screen = splash_screen.push(titles);
 
-        let txt_open = text(fl!("add-folder")).size(20);
-        let txt_open_container = Container::new(txt_open).center_x();
-        let btn_open = button(txt_open_container)
-            .padding([8, 18])
-            .on_press(Message::OpenFile);
+            let txt_open = text(fl!("add-folder")).size(20);
+            let txt_open_container = Container::new(txt_open).center_x();
+            let btn_open = button(txt_open_container)
+                .padding([8, 18])
+                .on_press(Message::AddFolder);
 
-        splash_screen = splash_screen.push(btn_open);
+            splash_screen = splash_screen.push(btn_open);
 
-        let mut splash_screen_container = Row::new()
-            .align_items(Alignment::Center)
-            .width(Length::Fill)
-            .height(Length::Fill);
+            let mut splash_screen_container = Row::new()
+                .align_items(Alignment::Center)
+                .width(Length::Fill)
+                .height(Length::Fill);
 
-        splash_screen_container = splash_screen_container.push(splash_screen);
+            splash_screen_container = splash_screen_container.push(splash_screen);
 
-        col = col.push(splash_screen_container);
+            col = col.push(splash_screen_container);
+        }
 
         col.into()
     }
@@ -300,7 +308,7 @@ impl Application for Yamp {
                 let _result = open::that_detached(url);
             }
 
-            Message::Scan => {
+            Message::DebugScan => {
                 let paths = fs::read_dir("./").unwrap();
 
                 for path in paths {
@@ -315,32 +323,35 @@ impl Application for Yamp {
                 // }
             }
 
-            // Via cosmic-edit
-            // Message::OpenFileDialog => {
-            //     if self.dialog_opt.is_none() {
-            //         let (dialog, command) = Dialog::new(
-            //             DialogKind::OpenMultipleFiles,
-            //             None,
-            //             Message::DialogMessage,
-            //             Message::OpenFileResult,
-            //         );
-            //         self.dialog_opt = Some(dialog);
-            //         return command;
-            //     }
-            // }
-            //
-            // Message::OpenProjectDialog => {
-            //     if self.dialog_opt.is_none() {
-            //         let (dialog, command) = Dialog::new(
-            //             DialogKind::OpenMultipleFolders,
-            //             None,
-            //             Message::DialogMessage,
-            //             Message::OpenProjectResult,
-            //         );
-            //         self.dialog_opt = Some(dialog);
-            //         return command;
-            //     }
-            // }
+            Message::AddFolder => {
+                return cosmic::command::future(async move {
+                    let dialog = file_chooser::open::Dialog::new().title(fl!("add-folder"));
+
+                    match dialog.open_folder().await {
+                        Ok(response) => Message::AddSongsToLibrary(response.url().to_owned()),
+
+                        Err(file_chooser::Error::Cancelled) => Message::Cancelled,
+
+                        Err(why) => Message::OpenError(Arc::new(why)),
+                    }
+                });
+            }
+
+            Message::AddSongsToLibrary(url) => {
+                let paths = fs::read_dir(url.to_file_path().unwrap()).unwrap();
+
+                for path in paths {
+                    //println!("Name: {}", path.unwrap().path().display());
+                    self.scanned_files.push(path.unwrap().path());
+                }
+
+                // self.audio_player.player.pause();
+
+                // for file in &self.scanned_files {
+                //     println!("Name: {}", file.display());
+                // }
+            }
+
 
             // Creates a new open dialog.
             // https://github.com/pop-os/libcosmic/blob/master/examples/open-dialog/src/main.rs
@@ -369,25 +380,6 @@ impl Application for Yamp {
                     }
                 });
             }
-
-            // left off with these two
-            // Message::OpenFolder => {
-            //     return cosmic::command::future(async move {
-            //     let dialog = file_chooser::open::Dialog::new().title("Choose a library location");
-            //
-            //     match dialog.open_folder().await {
-            //         Ok(response) => Message::Selected(response.url().to_owned()),
-            //
-            //         Err(file_chooser::Error::Cancelled) => Message::Cancelled,
-            //
-            //         Err(why) => Message::OpenError(Arc::new(why)),
-            //     }
-            //     });
-            // }
-            //
-            // Message::FolderSelected(url) => {
-            //     println!("{:?}", url.to_file_path().unwrap());
-            // }
 
             // Displays an error in the application's warning bar.
             Message::Error(why) => {
