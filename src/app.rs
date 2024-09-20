@@ -31,7 +31,7 @@ use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
 use symphonia::core::errors::Error;
 use symphonia::core::formats::{Cue, FormatOptions, Track};
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::{ColorMode, MetadataOptions, Tag, Value, Visual};
+use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, Value, Visual};
 use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
 
@@ -49,7 +49,7 @@ pub struct Yamp {
     /// A model that contains all of the pages assigned to the nav bar panel.
     nav: nav_bar::Model,
     /// A vector that contains the list of scanned files
-    scanned_files: Vec<PathBuf>,
+    scanned_files: Vec<MusicFile>,
     thing: Arc<i32>,
     audio_player: RodioAudioPlayer
 }
@@ -63,6 +63,11 @@ pub struct RodioAudioPlayer {
     _stream: rodio::OutputStream,
     /// Store content for rewind/replay
     content: Vec<u8>,
+}
+
+pub struct MusicFile {
+    saved_path: PathBuf,
+    metadata: MetadataRevision
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -198,8 +203,6 @@ impl Application for Yamp {
             content
         };
 
-        read_media_metadata();
-
         let mut app = Yamp {
             core,
             context_page: ContextPage::default(),
@@ -254,11 +257,34 @@ impl Application for Yamp {
        // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         if (&self.scanned_files.len() > &0) {
             for file in &self.scanned_files {
-                println!("Name: {}", file.display());
-                let file_txt = text(file.display().to_string());
-                let file_txt_container = Container::new(file_txt).width(Length::Fill);
+                println!("Name: {}", file.saved_path.display());
 
-                col = col.push(file_txt_container);
+                let tags = file.metadata.tags();
+
+                let mut idx = 1;
+
+                // Print tags with a standard tag key first, these are the most common tags.
+                for tag in tags.iter().filter(|tag| tag.is_known()) {
+                    if let Some(std_key) = tag.std_key {
+                        if (&format!("{:?}", std_key) == "TrackTitle") {
+                            let title = tag.value.to_string();
+                            println!("{}", &tag.value);
+                            let file_txt = text(title);
+                            let file_txt_container = Container::new(file_txt).width(Length::Fill);
+
+                            col = col.push(file_txt_container);
+                        }
+                        //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                    }
+                    idx += 1;
+                }
+
+
+
+                // let file_txt = text(file.saved_path.display().to_string());
+                // let file_txt_container = Container::new(file_txt).width(Length::Fill);
+                //
+                // col = col.push(file_txt_container);
             }
         } else {
             let mut splash_screen = Column::new()
@@ -321,7 +347,7 @@ impl Application for Yamp {
 
                 for path in paths {
                     //println!("Name: {}", path.unwrap().path().display());
-                    self.scanned_files.push(path.unwrap().path());
+                    //self.scanned_files.push(path.unwrap().path());
                 }
 
                 self.audio_player.player.pause();
@@ -350,14 +376,73 @@ impl Application for Yamp {
 
                 for path in paths {
                     //println!("Name: {}", path.unwrap().path().display());
-                    self.scanned_files.push(path.unwrap().path());
+                    //self.scanned_files.push(path.unwrap().path());
+
+                    let new_path = path.unwrap().path().clone();
+                    let saved_path = new_path.clone();
+
+                    // Create a hint to help the format registry guess what format reader is appropriate.
+                    let mut hint = Hint::new();
+
+                    // Open the media source.
+                    let src = std::fs::File::open(new_path).expect("failed to open media");
+
+                    // Create the media source stream.
+                    let mss = MediaSourceStream::new(Box::new(src), Default::default());
+
+                    // Use the default options for metadata and format readers.
+                    let metadata_opts: MetadataOptions = Default::default();
+                    let format_opts: FormatOptions = Default::default();
+
+                    let no_progress = false;
+
+                    // Probe the media source stream for metadata and get the format reader.
+                    match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
+                        Ok(mut probed) => {
+                            //print_tracks(probed.format.tracks());
+
+                            // Prefer metadata that's provided in the container format, over other tags found during the
+                            // probe operation.
+                            if let Some(metadata_rev) = probed.format.metadata().current() {
+                                //print_tags(metadata_rev.tags());
+                                // print_visuals(metadata_rev.visuals());
+
+                                let metadata = metadata_rev.clone();
+
+                                let music_file = MusicFile {
+                                    saved_path,
+                                    metadata
+                                };
+
+                                self.scanned_files.push(music_file);
+
+                                // Warn that certain tags are preferred.
+                                if probed.metadata.get().as_ref().is_some() {
+                                    info!("tags that are part of the container format are preferentially printed.");
+                                    info!("not printing additional tags that were found while probing.");
+                                }
+                            }
+                            else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
+                                //print_tags(metadata_rev.tags());
+                                // print_visuals(metadata_rev.visuals());
+
+                                let metadata = metadata_rev.clone();
+
+                                let music_file = MusicFile {
+                                    saved_path,
+                                    metadata
+                                };
+
+                                self.scanned_files.push(music_file);
+                            }
+                            // print_format_sans_path(&mut probed);
+                        }
+                        Err(err) => {
+                            // The input was not supported by any format reader.
+                            info!("the input is not supported");
+                        }
+                    }
                 }
-
-                // self.audio_player.player.pause();
-
-                // for file in &self.scanned_files {
-                //     println!("Name: {}", file.display());
-                // }
             }
 
 
@@ -638,7 +723,30 @@ impl Yamp {
 
 
 
+fn print_format_sans_path(probed: &mut ProbeResult) {
+    print_tracks(probed.format.tracks());
 
+    // Prefer metadata that's provided in the container format, over other tags found during the
+    // probe operation.
+    if let Some(metadata_rev) = probed.format.metadata().current() {
+        // print_tags(metadata_rev.tags());
+        // print_visuals(metadata_rev.visuals());
+
+        // Warn that certain tags are preferred.
+        if probed.metadata.get().as_ref().is_some() {
+            info!("tags that are part of the container format are preferentially printed.");
+            info!("not printing additional tags that were found while probing.");
+        }
+    }
+    else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
+        print_tags(metadata_rev.tags());
+        print_visuals(metadata_rev.visuals());
+    }
+
+    // print_cues(probed.format.cues());
+    // println!(":");
+    // println!();
+}
 
 
 
