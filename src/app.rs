@@ -70,6 +70,7 @@ pub struct MusicFile {
     saved_path: PathBuf,
     metadata: MetadataRevision,
     playing: bool,
+    paused: bool,
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -91,6 +92,8 @@ pub enum Message {
     AddFolder,
     AddSongsToLibrary(Url),
     StartPlayingNewTrack(PathBuf),
+    PauseCurrentTrack,
+    ResumeCurrentTrack,
 }
 
 /// Identifies a page in the application.
@@ -278,9 +281,13 @@ impl Application for Yamp {
                             let mut file_txt_row = Row::new();
                             file_txt_row = file_txt_row.push(file_txt);
 
-                            if (file.playing == true) {
+                            if (file.paused == true) {
+                                let resume_txt = text("Resume");
+                                let button = button(resume_txt).on_press(Message::ResumeCurrentTrack);
+                                file_txt_row = file_txt_row.push(button);
+                            } else if (file.playing == true) {
                                 let playing_txt = text("Pause");
-                                let button = button(playing_txt);
+                                let button = button(playing_txt).on_press(Message::PauseCurrentTrack);
                                 file_txt_row = file_txt_row.push(button);
                             } else {
                                 let paused_txt = text("Play");
@@ -428,7 +435,8 @@ impl Application for Yamp {
                                 let mut music_file = MusicFile {
                                     saved_path,
                                     metadata,
-                                    playing: false
+                                    playing: false,
+                                    paused: false,
                                 };
 
                                 self.scanned_files.push(music_file);
@@ -448,7 +456,8 @@ impl Application for Yamp {
                                 let music_file = MusicFile {
                                     saved_path,
                                     metadata,
-                                    playing: false
+                                    playing: false,
+                                    paused: false
                                 };
 
                                 self.scanned_files.push(music_file);
@@ -468,6 +477,7 @@ impl Application for Yamp {
                 self.audio_player.player.stop();
 
                 for file in &mut self.scanned_files {
+                    file.paused = false;
                     if (file.saved_path == file_path) {
                         file.playing = true;
                     } else {
@@ -493,6 +503,27 @@ impl Application for Yamp {
                 // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
                 // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
                 self.audio_player.player.play();
+            }
+
+            Message::PauseCurrentTrack => {
+                self.audio_player.player.pause();
+
+                for file in &mut self.scanned_files {
+                    if (file.playing == true) {
+                        file.playing = false;
+                        file.paused = true;
+                    }
+                }
+            }
+
+            Message::ResumeCurrentTrack => {
+                self.audio_player.player.play();
+                for file in &mut self.scanned_files {
+                    if (file.paused == true) {
+                        file.playing = true;
+                        file.paused = false;
+                    }
+                }
             }
 
 
