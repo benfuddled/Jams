@@ -27,6 +27,7 @@ use rodio::source::SineWave;
 // };
 
 use cosmic::dialog::file_chooser::{self, FileFilter};
+use cosmic::iced_widget::Scrollable;
 use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
 use symphonia::core::errors::Error;
 use symphonia::core::formats::{Cue, FormatOptions, Track};
@@ -258,10 +259,12 @@ impl Application for Yamp {
     fn view(&self) -> Element<Self::Message> {
         // self.nav.text() - pass it a nav item from the model to get its text
         // self.nav.active() - get currently active nav
-        let mut col = Column::new();
+        let mut window_col = Column::new();
 
        // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         if (&self.scanned_files.len() > &0) {
+            let mut file_col = Column::new();
+
             for file in &self.scanned_files {
                 println!("Name: {}", file.saved_path.display());
 
@@ -295,20 +298,25 @@ impl Application for Yamp {
                                 file_txt_row = file_txt_row.push(button);
                             }
 
-                            col = col.push(file_txt_row);
+                            file_col = file_col.push(file_txt_row);
                         }
                         //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
                     }
                     idx += 1;
                 }
 
-
-
                 // let file_txt = text(file.saved_path.display().to_string());
                 // let file_txt_container = Container::new(file_txt).width(Length::Fill);
                 //
                 // col = col.push(file_txt_container);
             }
+
+            let scroll_list = Scrollable::new(file_col).height(Length::Fill);
+            let scroll_container = Container::new(scroll_list).height(Length::Fill);
+
+            window_col = window_col.push(scroll_container);
+
+
         } else {
             let mut splash_screen = Column::new()
                 .align_items(Alignment::Center)
@@ -350,10 +358,10 @@ impl Application for Yamp {
 
             splash_screen_container = splash_screen_container.push(splash_screen);
 
-            col = col.push(splash_screen_container);
+            window_col = window_col.push(splash_screen_container);
         }
 
-        col.into()
+        window_col.into()
     }
 
     /// Application messages are handled here. The application state can be modified based on
