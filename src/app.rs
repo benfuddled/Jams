@@ -9,7 +9,7 @@ use std::fs;
 use cosmic::app::{Command, Core};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length};
-use cosmic::widget::{self, button, Column, Container, icon, menu, nav_bar, Row, text};
+use cosmic::widget::{self, button, Button, Column, Container, icon, menu, nav_bar, Row, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use cosmic::iced_core;
 use log::{error, info};
@@ -311,10 +311,22 @@ impl Application for Yamp {
                 // col = col.push(file_txt_container);
             }
 
+            let mut controls_row = Row::new();
+
+            let controls_button_txt = text("Play");
+            let controls_pause_button = button(controls_button_txt).on_press(Message::PauseCurrentTrack);
+
+            controls_row = controls_row.push(controls_pause_button);
+
             let scroll_list = Scrollable::new(file_col).height(Length::Fill).width(Length::Fill);
             let scroll_container = Container::new(scroll_list).height(Length::Fill).width(Length::Fill);
 
+            // let paused_txt = text("Play");
+            // let button = button(paused_txt);
+            let controls_container = Container::new(controls_row).height(Length::Fixed(100.0)).width(Length::Fill);
+
             window_col = window_col.push(scroll_container);
+            window_col = window_col.push(controls_container);
 
 
         } else {
