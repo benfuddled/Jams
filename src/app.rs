@@ -311,8 +311,8 @@ impl Application for Yamp {
                 // col = col.push(file_txt_container);
             }
 
-            let scroll_list = Scrollable::new(file_col).height(Length::Fill);
-            let scroll_container = Container::new(scroll_list).height(Length::Fill);
+            let scroll_list = Scrollable::new(file_col).height(Length::Fill).width(Length::Fill);
+            let scroll_container = Container::new(scroll_list).height(Length::Fill).width(Length::Fill);
 
             window_col = window_col.push(scroll_container);
 
