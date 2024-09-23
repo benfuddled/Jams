@@ -52,7 +52,8 @@ pub struct Yamp {
     /// A vector that contains the list of scanned files
     scanned_files: Vec<MusicFile>,
     thing: Arc<i32>,
-    audio_player: RodioAudioPlayer
+    audio_player: RodioAudioPlayer,
+    global_play_state: PlayState
 }
 
 /// The AudioPlayer struct handles audio playback using the rodio backend.
@@ -102,6 +103,12 @@ pub enum Page {
     Page1,
     Page2,
     Page3,
+}
+
+pub enum PlayState {
+    Playing,
+    Paused,
+    NotStarted
 }
 
 /// Identifies a context page to display in the context drawer.
@@ -210,6 +217,8 @@ impl Application for Yamp {
             content
         };
 
+        let mut global_play_state: PlayState = PlayState::NotStarted;
+
         let mut app = Yamp {
             core,
             context_page: ContextPage::default(),
@@ -217,8 +226,10 @@ impl Application for Yamp {
             nav,
             scanned_files,
             thing,
-            audio_player
+            audio_player,
+            global_play_state
         };
+
 
 
         let command = app.update_titles();
@@ -235,16 +246,15 @@ impl Application for Yamp {
                 vec![menu::Item::Button(fl!("about"), MenuAction::About)],
             ),
         ),
-            menu::Tree::with_children(
-                menu::root(fl!("debug")),
-                menu::items(
-                    &self.key_binds,
-                    vec![menu::Item::Button(fl!("debug-play"), MenuAction::Play),
-                         menu::Item::Button(fl!("debug-file-listing"), MenuAction::DebugScan),
-                         menu::Item::Button(fl!("debug-file-play"), MenuAction::OpenFile)],
-                ),
-            )
-
+                                      menu::Tree::with_children(
+                                          menu::root(fl!("debug")),
+                                          menu::items(
+                                              &self.key_binds,
+                                              vec![menu::Item::Button(fl!("debug-play"), MenuAction::Play),
+                                                   menu::Item::Button(fl!("debug-file-listing"), MenuAction::DebugScan),
+                                                   menu::Item::Button(fl!("debug-file-play"), MenuAction::OpenFile)],
+                                          ),
+                                      )
         ]);
 
         vec![menu_bar.into()]
@@ -261,11 +271,9 @@ impl Application for Yamp {
         // self.nav.active() - get currently active nav
         let mut window_col = Column::new();
 
-       // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
+        // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         if (&self.scanned_files.len() > &0) {
             let mut file_col = Column::new();
-
-            let mut any_playing = false;
 
             for file in &self.scanned_files {
                 println!("Name: {}", file.saved_path.display());
@@ -291,7 +299,6 @@ impl Application for Yamp {
                                 let button = button(resume_txt).on_press(Message::ResumeCurrentTrack);
                                 file_txt_row = file_txt_row.push(button);
                             } else if (file.playing == true) {
-                                any_playing = true;
                                 let playing_txt = text("Pause");
                                 let button = button(playing_txt).on_press(Message::PauseCurrentTrack);
                                 file_txt_row = file_txt_row.push(button);
@@ -321,22 +328,41 @@ impl Application for Yamp {
             // let paused_txt = text("Play");
             // let button = button(paused_txt);
 
-            let controls_button_txt = text("Play");
-            let controls_pause_button = button(controls_button_txt).on_press(Message::PauseCurrentTrack);
+            let mut controls_row = Row::new()
+                .spacing(10)
+                .align_items(Alignment::Center)
+                .height(Length::Fill);
 
             let controls_button_prev_txt = text("Previous");
             let controls_prev_button = button(controls_button_prev_txt).on_press(Message::PauseCurrentTrack);
 
+            controls_row = controls_row.push(controls_prev_button);
+
+            match &self.global_play_state {
+                PlayState::Playing => {
+                    let controls_button_txt = text("Pause");
+                    let controls_pause_button = button(controls_button_txt).on_press(Message::PauseCurrentTrack);
+
+                    controls_row = controls_row.push(controls_pause_button);
+                }
+                PlayState::Paused => {
+                    let controls_button_txt = text("Play");
+                    let controls_pause_button = button(controls_button_txt).on_press(Message::ResumeCurrentTrack);
+
+                    controls_row = controls_row.push(controls_pause_button);
+                }
+                PlayState::NotStarted => {
+                    let controls_button_txt = text("This Button Is Disabled");
+                    let controls_pause_button = button(controls_button_txt);
+
+                    controls_row = controls_row.push(controls_pause_button);
+                }
+            }
+
             let controls_button_next_txt = text("Next");
             let controls_next_button = button(controls_button_next_txt).on_press(Message::PauseCurrentTrack);
 
-            let controls_row = Row::new()
-                .push(controls_prev_button)
-                .push(controls_pause_button)
-                .push(controls_next_button)
-                .spacing(10)
-                .align_items(Alignment::Center)
-                .height(Length::Fill);
+            let controls_row = controls_row.push(controls_next_button);
 
             let controls_col = Column::new()
                 .push(controls_row)
@@ -349,8 +375,6 @@ impl Application for Yamp {
 
             window_col = window_col.push(scroll_container);
             window_col = window_col.push(controls_container);
-
-
         } else {
             let mut splash_screen = Column::new()
                 .align_items(Alignment::Center)
@@ -488,8 +512,7 @@ impl Application for Yamp {
                                     info!("tags that are part of the container format are preferentially printed.");
                                     info!("not printing additional tags that were found while probing.");
                                 }
-                            }
-                            else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
+                            } else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
                                 //print_tags(metadata_rev.tags());
                                 // print_visuals(metadata_rev.visuals());
 
@@ -515,7 +538,6 @@ impl Application for Yamp {
             }
 
             Message::StartPlayingNewTrack(file_path) => {
-
                 self.audio_player.player.stop();
 
                 for file in &mut self.scanned_files {
@@ -545,10 +567,13 @@ impl Application for Yamp {
                 // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
                 // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
                 self.audio_player.player.play();
+
+                self.global_play_state = PlayState::Playing;
             }
 
             Message::PauseCurrentTrack => {
                 self.audio_player.player.pause();
+                self.global_play_state = PlayState::Paused;
 
                 for file in &mut self.scanned_files {
                     if (file.playing == true) {
@@ -560,6 +585,7 @@ impl Application for Yamp {
 
             Message::ResumeCurrentTrack => {
                 self.audio_player.player.play();
+                self.global_play_state = PlayState::Playing;
                 for file in &mut self.scanned_files {
                     if (file.paused == true) {
                         file.playing = true;
@@ -690,13 +716,12 @@ impl Application for Yamp {
                 self.audio_player.player.play();
             }
 
-
             Message::Play => {
 
-               // let sinker = Arc::clone(&sink_ultimate);
-               //
-               //  let thing_ult = Arc::new(5);
-               //  let thing = Arc::clone(&thing_ult);
+                // let sinker = Arc::clone(&sink_ultimate);
+                //
+                //  let thing_ult = Arc::new(5);
+                //  let thing = Arc::clone(&thing_ult);
 
                 // _stream must live as long as the sink
                 // let (_stream, stream_handle) = OutputStream::try_default().unwrap();
@@ -726,7 +751,6 @@ impl Application for Yamp {
                 let file = BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
 
                 let source = Decoder::new(file).unwrap();
-
 
 
                 // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
