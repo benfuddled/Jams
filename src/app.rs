@@ -73,7 +73,12 @@ pub struct MusicFile {
     metadata: MetadataRevision,
     playing: bool,
     paused: bool,
-    track_title: String
+    track_title: String,
+    track_number: u16,
+    artist: String,
+    album: String,
+    album_artist: String,
+    date: String
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -491,7 +496,12 @@ impl Application for Yamp {
 
                                 let tags = metadata.tags();
 
-                                let mut track_title = String::from(" ");
+                                let mut track_title = String::from("");
+                                let mut album = String::from("");
+                                let mut artist = String::from("");
+                                let mut album_artist = String::from("");
+                                let mut date = String::from("");
+                                let mut track_number = 0;
 
                                 let mut idx = 1;
 
@@ -504,6 +514,31 @@ impl Application for Yamp {
                                         }
                                         //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
                                     }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "Album") {
+                                            album = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "AlbumArtist") {
+                                            album_artist = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "Artist") {
+                                            artist = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "Date") {
+                                            date = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "TrackNumber") {
+                                            track_number = tag.value.to_string().parse::<u16>().unwrap();
+                                        }
+                                    }
                                     idx += 1;
                                 }
 
@@ -513,8 +548,13 @@ impl Application for Yamp {
                                     saved_path,
                                     metadata,
                                     track_title,
+                                    track_number,
+                                    artist,
+                                    album,
+                                    album_artist,
                                     playing: false,
                                     paused: false,
+                                    date,
                                 };
 
                                 self.scanned_files.push(music_file);
@@ -549,12 +589,18 @@ impl Application for Yamp {
                                 }
 
 
+                                // FIXME: Figure out where this condition gets its tags
                                 let music_file = MusicFile {
                                     saved_path,
                                     metadata,
                                     track_title,
+                                    track_number: 0,
+                                    artist: "".to_string(),
+                                    album: "".to_string(),
+                                    album_artist: "".to_string(),
                                     playing: false,
-                                    paused: false
+                                    paused: false,
+                                    date: "".to_string(),
                                 };
 
                                 self.scanned_files.push(music_file);
