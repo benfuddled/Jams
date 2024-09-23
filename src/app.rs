@@ -341,13 +341,17 @@ impl Application for Yamp {
             match &self.global_play_state {
                 PlayState::Playing => {
                     let controls_button_txt = text("Pause");
-                    let controls_pause_button = button(controls_button_txt).on_press(Message::PauseCurrentTrack);
+                    let controls_pause_button = button(controls_button_txt)
+                        .style(theme::Button::Suggested)
+                        .on_press(Message::PauseCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
                 PlayState::Paused => {
                     let controls_button_txt = text("Play");
-                    let controls_pause_button = button(controls_button_txt).on_press(Message::ResumeCurrentTrack);
+                    let controls_pause_button = button(controls_button_txt)
+                        .style(theme::Button::Suggested)
+                        .on_press(Message::ResumeCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
