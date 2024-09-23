@@ -73,6 +73,7 @@ pub struct MusicFile {
     metadata: MetadataRevision,
     playing: bool,
     paused: bool,
+    track_title: String
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -276,44 +277,30 @@ impl Application for Yamp {
             let mut file_col = Column::new();
 
             for file in &self.scanned_files {
-                println!("Name: {}", file.saved_path.display());
+                //println!("Name: {}", file.saved_path.display());
 
-                let tags = file.metadata.tags();
+                let title = file.track_title.clone();
+                let file_txt = text(title);
+                //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
 
-                let mut idx = 1;
+                let mut file_txt_row = Row::new();
+                file_txt_row = file_txt_row.push(file_txt);
 
-                // Print tags with a standard tag key first, these are the most common tags.
-                for tag in tags.iter().filter(|tag| tag.is_known()) {
-                    if let Some(std_key) = tag.std_key {
-                        if (&format!("{:?}", std_key) == "TrackTitle") {
-                            let title = tag.value.to_string();
-                            println!("{}", &tag.value);
-                            let file_txt = text(title);
-                            //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
-
-                            let mut file_txt_row = Row::new();
-                            file_txt_row = file_txt_row.push(file_txt);
-
-                            if (file.paused == true) {
-                                let resume_txt = text("Resume");
-                                let button = button(resume_txt).on_press(Message::ResumeCurrentTrack);
-                                file_txt_row = file_txt_row.push(button);
-                            } else if (file.playing == true) {
-                                let playing_txt = text("Pause");
-                                let button = button(playing_txt).on_press(Message::PauseCurrentTrack);
-                                file_txt_row = file_txt_row.push(button);
-                            } else {
-                                let paused_txt = text("Play");
-                                let button = button(paused_txt).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
-                                file_txt_row = file_txt_row.push(button);
-                            }
-
-                            file_col = file_col.push(file_txt_row);
-                        }
-                        //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
-                    }
-                    idx += 1;
+                if (file.paused == true) {
+                    let resume_txt = text("Resume");
+                    let button = button(resume_txt).on_press(Message::ResumeCurrentTrack);
+                    file_txt_row = file_txt_row.push(button);
+                } else if (file.playing == true) {
+                    let playing_txt = text("Pause");
+                    let button = button(playing_txt).on_press(Message::PauseCurrentTrack);
+                    file_txt_row = file_txt_row.push(button);
+                } else {
+                    let paused_txt = text("Play");
+                    let button = button(paused_txt).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
+                    file_txt_row = file_txt_row.push(button);
                 }
+
+                file_col = file_col.push(file_txt_row);
 
                 // let file_txt = text(file.saved_path.display().to_string());
                 // let file_txt_container = Container::new(file_txt).width(Length::Fill);
@@ -502,9 +489,30 @@ impl Application for Yamp {
 
                                 let metadata = metadata_rev.clone();
 
+                                let tags = metadata.tags();
+
+                                let mut track_title = String::from(" ");
+
+                                let mut idx = 1;
+
+                                // Print tags with a standard tag key first, these are the most common tags.
+                                for tag in tags.iter().filter(|tag| tag.is_known()) {
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "TrackTitle") {
+                                            track_title = tag.value.to_string();
+                                            //println!("{}", &tag.value);
+                                        }
+                                        //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                                    }
+                                    idx += 1;
+                                }
+
+
+
                                 let mut music_file = MusicFile {
                                     saved_path,
                                     metadata,
+                                    track_title,
                                     playing: false,
                                     paused: false,
                                 };
@@ -522,9 +530,29 @@ impl Application for Yamp {
 
                                 let metadata = metadata_rev.clone();
 
+                                let tags = metadata.tags();
+
+                                let mut track_title = String::from(" ");
+
+                                let mut idx = 1;
+
+                                // Print tags with a standard tag key first, these are the most common tags.
+                                for tag in tags.iter().filter(|tag| tag.is_known()) {
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "TrackTitle") {
+                                            track_title = tag.value.to_string();
+                                            //println!("{}", &tag.value);
+                                        }
+                                        //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                                    }
+                                    idx += 1;
+                                }
+
+
                                 let music_file = MusicFile {
                                     saved_path,
                                     metadata,
+                                    track_title,
                                     playing: false,
                                     paused: false
                                 };
