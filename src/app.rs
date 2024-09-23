@@ -265,6 +265,8 @@ impl Application for Yamp {
         if (&self.scanned_files.len() > &0) {
             let mut file_col = Column::new();
 
+            let mut any_playing = false;
+
             for file in &self.scanned_files {
                 println!("Name: {}", file.saved_path.display());
 
@@ -289,6 +291,7 @@ impl Application for Yamp {
                                 let button = button(resume_txt).on_press(Message::ResumeCurrentTrack);
                                 file_txt_row = file_txt_row.push(button);
                             } else if (file.playing == true) {
+                                any_playing = true;
                                 let playing_txt = text("Pause");
                                 let button = button(playing_txt).on_press(Message::PauseCurrentTrack);
                                 file_txt_row = file_txt_row.push(button);
@@ -311,19 +314,38 @@ impl Application for Yamp {
                 // col = col.push(file_txt_container);
             }
 
-            let mut controls_row = Row::new();
-
-            let controls_button_txt = text("Play");
-            let controls_pause_button = button(controls_button_txt).on_press(Message::PauseCurrentTrack);
-
-            controls_row = controls_row.push(controls_pause_button);
 
             let scroll_list = Scrollable::new(file_col).height(Length::Fill).width(Length::Fill);
             let scroll_container = Container::new(scroll_list).height(Length::Fill).width(Length::Fill);
 
             // let paused_txt = text("Play");
             // let button = button(paused_txt);
-            let controls_container = Container::new(controls_row).height(Length::Fixed(100.0)).width(Length::Fill);
+
+            let controls_button_txt = text("Play");
+            let controls_pause_button = button(controls_button_txt).on_press(Message::PauseCurrentTrack);
+
+            let controls_button_prev_txt = text("Previous");
+            let controls_prev_button = button(controls_button_prev_txt).on_press(Message::PauseCurrentTrack);
+
+            let controls_button_next_txt = text("Next");
+            let controls_next_button = button(controls_button_next_txt).on_press(Message::PauseCurrentTrack);
+
+            let controls_row = Row::new()
+                .push(controls_prev_button)
+                .push(controls_pause_button)
+                .push(controls_next_button)
+                .spacing(10)
+                .align_items(Alignment::Center)
+                .height(Length::Fill);
+
+            let controls_col = Column::new()
+                .push(controls_row)
+                .height(Length::Fixed(100.0))
+                .width(Length::Fill)
+                .align_items(Alignment::Center);
+
+            let controls_container = Container::new(controls_col)
+                .style(cosmic::style::Container::ContextDrawer);
 
             window_col = window_col.push(scroll_container);
             window_col = window_col.push(controls_container);
