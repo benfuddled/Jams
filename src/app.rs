@@ -289,19 +289,22 @@ impl Application for Yamp {
                 let mut file_txt_row = Row::new()
                     .align_items(Alignment::Center)
                     .spacing(5)
-                    .padding([5, 5, 5, 5]);
+                    .padding([6, 4, 6, 4]);
 
                 if (file.paused == true) {
-                    let resume_txt = text("Resume");
-                    let button = button(resume_txt).on_press(Message::ResumeCurrentTrack);
+                    let play_icon = Container::new(icon::from_name("media-playback-start-symbolic"));
+                    //let resume_txt = text("Resume");
+                    let button = button(play_icon).on_press(Message::ResumeCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
                 } else if (file.playing == true) {
-                    let playing_txt = text("Pause");
-                    let button = button(playing_txt).on_press(Message::PauseCurrentTrack);
+                    let pause_icon = Container::new(icon::from_name("media-playback-pause-symbolic"));
+                    //let playing_txt = text("Pause");
+                    let button = button(pause_icon).on_press(Message::PauseCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
                 } else {
-                    let paused_txt = text("Play");
-                    let button = button(paused_txt).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
+                    let play_icon = Container::new(icon::from_name("media-playback-start-symbolic"));
+                    //let paused_txt = text("Play");
+                    let button = button(play_icon).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
                     file_txt_row = file_txt_row.push(button);
                 }
 
