@@ -305,8 +305,12 @@ impl Application for Yamp {
                     file_txt_row = file_txt_row.push(button);
                 }
 
-                let title = text(file.track_title.clone());
+                let title = text(file.track_title.clone()).width(Length::FillPortion(2));
+                let artist = text(file.artist.clone()).width(Length::FillPortion(1));
+                let album = text(file.album.clone()).width(Length::FillPortion(1));
                 file_txt_row = file_txt_row.push(title);
+                file_txt_row = file_txt_row.push(artist);
+                file_txt_row = file_txt_row.push(album);
 
                 file_col = file_col.push(file_txt_row);
 
