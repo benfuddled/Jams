@@ -279,17 +279,17 @@ impl Application for Yamp {
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         if (&self.scanned_files.len() > &0) {
-            let mut file_col = Column::new();
+            let mut file_col = Column::new().spacing(2);
 
             for file in &self.scanned_files {
                 //println!("Name: {}", file.saved_path.display());
 
-                let title = file.track_title.clone();
-                let file_txt = text(title);
                 //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
 
-                let mut file_txt_row = Row::new();
-                file_txt_row = file_txt_row.push(file_txt);
+                let mut file_txt_row = Row::new()
+                    .align_items(Alignment::Center)
+                    .spacing(5)
+                    .padding([5, 5, 5, 5]);
 
                 if (file.paused == true) {
                     let resume_txt = text("Resume");
@@ -305,7 +305,12 @@ impl Application for Yamp {
                     file_txt_row = file_txt_row.push(button);
                 }
 
+                let title = text(file.track_title.clone());
+                file_txt_row = file_txt_row.push(title);
+
                 file_col = file_col.push(file_txt_row);
+
+                file_col = file_col.push(widget::divider::horizontal::default());
 
                 // let file_txt = text(file.saved_path.display().to_string());
                 // let file_txt_container = Container::new(file_txt).width(Length::Fill);
