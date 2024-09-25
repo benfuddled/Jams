@@ -344,24 +344,36 @@ impl Application for Yamp {
 
             match &self.global_play_state {
                 PlayState::Playing => {
-                    let controls_button_txt = text("Pause");
-                    let controls_pause_button = button(controls_button_txt)
+                    //let controls_button_txt = text("Pause");
+                    let play_icon = Container::new(icon::from_name("media-playback-pause-symbolic").size(24));
+                    let controls_pause_button = button(play_icon)
+                        .width(50)
+                        .height(50)
+                        .padding([13, 0, 0, 12])
                         .style(theme::Button::Suggested)
                         .on_press(Message::PauseCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
                 PlayState::Paused => {
-                    let controls_button_txt = text("Play");
-                    let controls_pause_button = button(controls_button_txt)
+                    //let controls_button_txt = text("Play");
+                    let pause_icon = Container::new(icon::from_name("media-playback-start-symbolic").size(24));
+                    let controls_pause_button = button(pause_icon)
+                        .width(50)
+                        .height(50)
+                        .padding([13, 0, 0, 13])
                         .style(theme::Button::Suggested)
                         .on_press(Message::ResumeCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
                 PlayState::NotStarted => {
-                    let controls_button_txt = text("This Button Is Disabled");
-                    let controls_pause_button = button(controls_button_txt);
+                    //let controls_button_txt = text("This Button Is Disabled");
+                    let play_icon = Container::new(icon::from_name("media-playback-start-symbolic").size(24));
+                    let controls_pause_button = button(play_icon)
+                        .padding([13, 0, 0, 13])
+                        .width(50)
+                        .height(50);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
