@@ -8,7 +8,7 @@ use crate::{fl, player};
 use std::fs;
 use cosmic::app::{Command, Core};
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, Length};
+use cosmic::iced::{Alignment, keyboard, Length, Subscription, time};
 use cosmic::widget::{self, button, Button, Column, Container, icon, menu, nav_bar, Row, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use cosmic::iced_core;
@@ -17,7 +17,7 @@ use log::{error, info};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use rodio::{Decoder, OutputStream, Sink, source::Source};
 use rodio::source::SineWave;
 
@@ -53,7 +53,9 @@ pub struct Yamp {
     scanned_files: Vec<MusicFile>,
     thing: Arc<i32>,
     audio_player: RodioAudioPlayer,
-    global_play_state: PlayState
+    global_play_state: PlayState,
+    seek_position: Duration,
+    last_tick: Instant,
 }
 
 /// The AudioPlayer struct handles audio playback using the rodio backend.
@@ -81,6 +83,15 @@ pub struct MusicFile {
     date: String
 }
 
+// #[derive(Default)]
+// enum WatchState {
+//     #[default]
+//     Idle,
+//     Ticking {
+//         last_tick: Instant,
+//     },
+// }
+
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
 /// This is used to communicate between the different parts of your application.
 /// If your application does not need to send messages, you can use an empty enum or `()`.
@@ -102,6 +113,7 @@ pub enum Message {
     StartPlayingNewTrack(PathBuf),
     PauseCurrentTrack,
     ResumeCurrentTrack,
+    WatchTick(Instant),
 }
 
 /// Identifies a page in the application.
@@ -111,10 +123,12 @@ pub enum Page {
     Page3,
 }
 
+#[derive(Default)]
 pub enum PlayState {
-    Playing,
+    #[default]
+    Idle,
     Paused,
-    NotStarted
+    Playing,
 }
 
 /// Identifies a context page to display in the context drawer.
@@ -223,7 +237,7 @@ impl Application for Yamp {
             content
         };
 
-        let mut global_play_state: PlayState = PlayState::NotStarted;
+        let mut global_play_state: PlayState = PlayState::default();
 
         let mut app = Yamp {
             core,
@@ -233,7 +247,9 @@ impl Application for Yamp {
             scanned_files,
             thing,
             audio_player,
-            global_play_state
+            global_play_state,
+            seek_position: Duration::default(),
+            last_tick: Instant::now()
         };
 
 
@@ -367,7 +383,7 @@ impl Application for Yamp {
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
-                PlayState::NotStarted => {
+                PlayState::Idle => {
                     //let controls_button_txt = text("This Button Is Disabled");
                     let play_icon = Container::new(icon::from_name("media-playback-start-symbolic").size(24));
                     let controls_pause_button = button(play_icon)
@@ -384,11 +400,17 @@ impl Application for Yamp {
 
             let controls_row = controls_row.push(controls_next_button);
 
-            let controls_col = Column::new()
+            let mut controls_col = Column::new()
                 .push(controls_row)
                 .height(Length::Fixed(100.0))
                 .width(Length::Fill)
                 .align_items(Alignment::Center);
+
+            let timer = self.seek_position.as_secs().to_string() + " of TRACKLENGTH";
+
+            let txt_timer = text(timer).size(20);
+
+            controls_col = controls_col.push(txt_timer);
 
             let controls_container = Container::new(controls_col)
                 .style(cosmic::style::Container::ContextDrawer);
@@ -442,11 +464,44 @@ impl Application for Yamp {
         window_col.into()
     }
 
+    fn subscription(&self) -> Subscription<Message> {
+        let tick = match self.global_play_state {
+            PlayState::Idle => Subscription::none(),
+            PlayState::Paused => Subscription::none(),
+            PlayState::Playing { .. } => {
+                time::every(Duration::from_millis(10)).map(Message::WatchTick)
+            }
+        };
+
+        fn handle_hotkey(
+            key: keyboard::Key,
+            _modifiers: keyboard::Modifiers,
+        ) -> Option<Message> {
+            use keyboard::key;
+
+            match key.as_ref() {
+                keyboard::Key::Named(key::Named::Space) => {
+                    Some(Message::ResumeCurrentTrack)
+                }
+                keyboard::Key::Character("r") => Some(Message::PauseCurrentTrack),
+                _ => None,
+            }
+        }
+
+        Subscription::batch(vec![tick, keyboard::on_key_press(handle_hotkey)])
+    }
+
     /// Application messages are handled here. The application state can be modified based on
     /// what message was received. Commands may be returned for asynchronous execution on a
     /// background thread managed by the application's executor.
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
+            Message::WatchTick(now) => {
+                if let PlayState::Playing = &mut self.global_play_state {
+                    self.seek_position += now - self.last_tick;
+                    self.last_tick = now;
+                }
+            }
             Message::LaunchUrl(url) => {
                 let _result = open::that_detached(url);
             }
@@ -536,7 +591,7 @@ impl Application for Yamp {
                                             track_title = tag.value.to_string();
                                             //println!("{}", &tag.value);
                                         }
-                                        //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                                        println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
                                     }
                                     if let Some(std_key) = tag.std_key {
                                         if (&format!("{:?}", std_key) == "Album") {
@@ -607,7 +662,7 @@ impl Application for Yamp {
                                             track_title = tag.value.to_string();
                                             //println!("{}", &tag.value);
                                         }
-                                        //println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                                        println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
                                     }
                                     idx += 1;
                                 }
@@ -655,6 +710,8 @@ impl Application for Yamp {
 
                 let source = Decoder::new(file).unwrap();
 
+                println!("{:?}", source.total_duration());
+
                 // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
                 // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
                 // (_STREAM IS A FIELD IN THIS STRUCT)
@@ -669,6 +726,9 @@ impl Application for Yamp {
                 // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
                 // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
                 self.audio_player.player.play();
+
+                self.last_tick = Instant::now();
+                self.seek_position = Duration::default();
 
                 self.global_play_state = PlayState::Playing;
             }
@@ -686,6 +746,7 @@ impl Application for Yamp {
             }
 
             Message::ResumeCurrentTrack => {
+                self.last_tick = Instant::now();
                 self.audio_player.player.play();
                 self.global_play_state = PlayState::Playing;
                 for file in &mut self.scanned_files {
