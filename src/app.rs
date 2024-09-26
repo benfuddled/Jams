@@ -54,6 +54,7 @@ pub struct Yamp {
     thing: Arc<i32>,
     audio_player: RodioAudioPlayer,
     global_play_state: PlayState,
+    current_track_duration: Duration,
     seek_position: Duration,
     last_tick: Instant,
 }
@@ -248,6 +249,7 @@ impl Application for Yamp {
             thing,
             audio_player,
             global_play_state,
+            current_track_duration: Duration::default(),
             seek_position: Duration::default(),
             last_tick: Instant::now()
         };
@@ -406,7 +408,7 @@ impl Application for Yamp {
                 .width(Length::Fill)
                 .align_items(Alignment::Center);
 
-            let timer = self.seek_position.as_secs().to_string() + " of TRACKLENGTH";
+            let timer = self.seek_position.as_secs().to_string() + " of " + &self.current_track_duration.as_secs().to_string();
 
             let txt_timer = text(timer).size(20);
 
@@ -711,6 +713,8 @@ impl Application for Yamp {
                 let source = Decoder::new(file).unwrap();
 
                 println!("{:?}", source.total_duration());
+
+                self.current_track_duration = source.total_duration().unwrap();
 
                 // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
                 // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
