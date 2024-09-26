@@ -411,18 +411,23 @@ impl Application for Yamp {
                 .width(Length::Fill)
                 .align_items(Alignment::Center);
 
-            let timer = self.seek_position.as_secs().to_string() + " of " + &self.current_track_duration.as_secs().to_string();
+            let pos = self.seek_position.as_secs().to_string();
+            let total = self.current_track_duration.as_secs().to_string();
 
-            let txt_timer = text(timer).size(20);
+            let pos_txt = text(pos).size(20);
+            let progress_scrubber = slider(0..=100, self.scrub_value, Message::Scrub).width(250);
+            let total_txt = text(total).size(20);
 
-            let durr = self.current_track_duration.as_secs();
 
-            let progress_size = std::ops::Range { start: 3, end: 5};
+            let timing_row = Row::new()
+                .spacing(5)
+                .align_items(Alignment::Center)
+                .push(pos_txt)
+                .push(progress_scrubber)
+                .push(total_txt);
 
-            let progress_scrubber = slider(1..=100, self.scrub_value, Message::Scrub);
 
-            controls_col = controls_col.push(txt_timer);
-            controls_col = controls_col.push(progress_scrubber);
+            controls_col = controls_col.push(timing_row);
 
             let controls_container = Container::new(controls_col)
                 .style(cosmic::style::Container::ContextDrawer);
