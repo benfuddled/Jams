@@ -9,7 +9,7 @@ use std::fs;
 use cosmic::app::{Command, Core};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, keyboard, Length, Subscription, time};
-use cosmic::widget::{self, button, Button, Column, Container, icon, menu, nav_bar, Row, text};
+use cosmic::widget::{self, button, Button, Column, Container, icon, menu, nav_bar, Row, slider, text};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use cosmic::iced_core;
 use log::{error, info};
@@ -57,6 +57,7 @@ pub struct Yamp {
     current_track_duration: Duration,
     seek_position: Duration,
     last_tick: Instant,
+    scrub_value: u8
 }
 
 /// The AudioPlayer struct handles audio playback using the rodio backend.
@@ -115,6 +116,7 @@ pub enum Message {
     PauseCurrentTrack,
     ResumeCurrentTrack,
     WatchTick(Instant),
+    Scrub(u8),
 }
 
 /// Identifies a page in the application.
@@ -249,6 +251,7 @@ impl Application for Yamp {
             thing,
             audio_player,
             global_play_state,
+            scrub_value: 50,
             current_track_duration: Duration::default(),
             seek_position: Duration::default(),
             last_tick: Instant::now()
@@ -412,7 +415,14 @@ impl Application for Yamp {
 
             let txt_timer = text(timer).size(20);
 
+            let durr = self.current_track_duration.as_secs();
+
+            let progress_size = std::ops::Range { start: 3, end: 5};
+
+            let progress_scrubber = slider(1..=100, self.scrub_value, Message::Scrub);
+
             controls_col = controls_col.push(txt_timer);
+            controls_col = controls_col.push(progress_scrubber);
 
             let controls_container = Container::new(controls_col)
                 .style(cosmic::style::Container::ContextDrawer);
@@ -965,6 +975,15 @@ impl Application for Yamp {
 
                 // Set the title of the context drawer.
                 self.set_context_title(context_page.title());
+            }
+            Message::Scrub(value) => {
+                self.scrub_value = value;
+                let percent: f64 = (f64::from(value) / 100.0);
+                let pos = self.current_track_duration.as_secs() as f64 * percent;
+                println!("scrub {}, pos {}, percent {}", u64::from(value), pos, percent);
+                self.seek_position = Duration::from_secs(pos as u64);
+                self.audio_player.player.try_seek(self.seek_position).unwrap();
+                //println!("{}", value)
             }
         }
         Command::none()
