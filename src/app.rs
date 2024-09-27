@@ -414,6 +414,8 @@ impl Application for Yamp {
             let pos = self.seek_position.as_secs().to_string();
             let total = self.current_track_duration.as_secs().to_string();
 
+            println!("{}", self.seek_position.as_secs());
+
             let pos_txt = text(pos).size(20);
             let progress_scrubber = slider(0..=100, self.scrub_value, Message::Scrub).width(250);
             let total_txt = text(total).size(20);
@@ -486,7 +488,7 @@ impl Application for Yamp {
             PlayState::Idle => Subscription::none(),
             PlayState::Paused => Subscription::none(),
             PlayState::Playing { .. } => {
-                time::every(Duration::from_millis(10)).map(Message::WatchTick)
+                time::every(Duration::from_millis(100)).map(Message::WatchTick)
             }
         };
 
@@ -517,6 +519,9 @@ impl Application for Yamp {
                 if let PlayState::Playing = &mut self.global_play_state {
                     self.seek_position += now - self.last_tick;
                     self.last_tick = now;
+
+                    // update scrubber
+                    self.scrub_value = (self.seek_position.as_secs() as f64 / self.current_track_duration.as_secs() as f64 * 100.0) as u8;
                 }
             }
             Message::LaunchUrl(url) => {
