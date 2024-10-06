@@ -296,7 +296,7 @@ impl Application for Yamp {
     fn view(&self) -> Element<Self::Message> {
         // self.nav.text() - pass it a nav item from the model to get its text
         // self.nav.active() - get currently active nav
-        let mut window_col = Column::new();
+        let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         if (&self.scanned_files.len() > &0) {
@@ -417,18 +417,29 @@ impl Application for Yamp {
 
             let mut controls_col = Column::new()
                 .push(controls_row)
-                .height(Length::Fixed(100.0))
+                .height(Length::Fixed(110.0))
                 .width(Length::Fill)
                 .align_items(Alignment::Center);
 
-            let pos = self.seek_position.as_secs().to_string();
-            let total = self.current_track_duration.as_secs().to_string();
+            let min_seek_position = self.seek_position.as_secs() / 60;
+            let sec_seek_position = self.seek_position.as_secs() % 60;
 
-            println!("{}", self.seek_position.as_secs());
+            let min_duration = self.current_track_duration.as_secs() / 60;
+            let sec_duration = self.current_track_duration.as_secs() % 60;
 
-            let pos_txt = text(pos).size(20);
+            //println!("{} : {}", min_seek_position, sec_seek_position);
+
+            //let pos = self.seek_position.as_secs().to_string();
+            //https://stackoverflow.com/questions/66666348/println-to-print-a-2-digit-integer
+            let pos = format!("{}:{:02}", min_seek_position, sec_seek_position);
+            //let total = self.current_track_duration.as_secs().to_string();
+            let total = format!("{}:{:02}", min_duration, sec_duration);
+
+            //println!("{}", self.seek_position.as_secs());
+
+            let pos_txt = text(pos).size(18);
             let progress_scrubber = slider(0..=100, self.scrub_value, Message::Scrub).width(250);
-            let total_txt = text(total).size(20);
+            let total_txt = text(total).size(18);
 
 
             let timing_row = Row::new()
