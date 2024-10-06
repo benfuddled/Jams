@@ -358,8 +358,13 @@ impl Application for Yamp {
                 .align_items(Alignment::Center)
                 .height(Length::Fill);
 
-            let controls_button_prev_txt = text("Previous");
-            let controls_prev_button = button(controls_button_prev_txt).on_press(Message::PauseCurrentTrack);
+            //let controls_button_prev_txt = text("Previous");
+            let back_icon = Container::new(icon::from_name("media-skip-backward-symbolic").size(16));
+            let controls_prev_button = button(back_icon)
+                .width(36)
+                .height(36)
+                .padding([10, 0, 0, 10])
+                .on_press(Message::PauseCurrentTrack);
 
             controls_row = controls_row.push(controls_prev_button);
 
@@ -370,7 +375,7 @@ impl Application for Yamp {
                     let controls_pause_button = button(play_icon)
                         .width(50)
                         .height(50)
-                        .padding([13, 0, 0, 12])
+                        .padding([13, 0, 0, 13])
                         .style(theme::Button::Suggested)
                         .on_press(Message::PauseCurrentTrack);
 
@@ -382,7 +387,7 @@ impl Application for Yamp {
                     let controls_pause_button = button(pause_icon)
                         .width(50)
                         .height(50)
-                        .padding([13, 0, 0, 13])
+                        .padding([13, 0, 0, 14])
                         .style(theme::Button::Suggested)
                         .on_press(Message::ResumeCurrentTrack);
 
@@ -392,7 +397,7 @@ impl Application for Yamp {
                     //let controls_button_txt = text("This Button Is Disabled");
                     let play_icon = Container::new(icon::from_name("media-playback-start-symbolic").size(24));
                     let controls_pause_button = button(play_icon)
-                        .padding([13, 0, 0, 13])
+                        .padding([13, 0, 0, 14])
                         .width(50)
                         .height(50);
 
@@ -400,8 +405,13 @@ impl Application for Yamp {
                 }
             }
 
-            let controls_button_next_txt = text("Next");
-            let controls_next_button = button(controls_button_next_txt).on_press(Message::PauseCurrentTrack);
+            //let controls_button_next_txt = text("Next");
+            let forward_icon = Container::new(icon::from_name("media-skip-forward-symbolic").size(16));
+            let controls_next_button = button(forward_icon)
+                .width(36)
+                .height(36)
+                .padding([10, 0, 0, 10])
+                .on_press(Message::PauseCurrentTrack);
 
             let controls_row = controls_row.push(controls_next_button);
 
