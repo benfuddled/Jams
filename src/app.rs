@@ -757,19 +757,19 @@ impl Application for Yamp {
 
                 self.current_track_duration = source.total_duration().unwrap();
 
-                // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
-                // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
-                // (_STREAM IS A FIELD IN THIS STRUCT)
+                // Turns out I just had wrap this guy in a struct,
+                // I think because the stream needs to stay alive or audio won't play.
+                // (_stream is a field in this struct)
                 // (tested without the _stream field and audio didn't work jsyk)
-                // SLEEP UNTIL END IS COMPLETELY UNNECESSARY IN THIS CASE BECAUSE
-                // LIBCOSMIC KEEPS THE MAIN THREAD ALIVE
-                // AND I DON'T HAVE TO MAKE A SECOND THREAD BECAUSE RODIO IS ALREADY DOING THAT
-                // IN THE BACKGROUND
-                // HOLY SMOKES
+                // Sleep until end is completely unnecessary in this case because
+                // libcosmic keeps the main thread alive.
+                // And I don't have to make a second thread because
+                // rodio is already doing that in the background
+                // holy smokes
                 self.audio_player.player.append(source);
-                // WHEN YOU APPEND A SOURCE TO THE PLAYER IT IMMEDIATELY STARTS PLAYING
-                // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
-                // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
+                // When you append a source to the player it immediately starts playing
+                // but if you pause and append another thing it don't start playing again
+                // therefore, we make sure to call play every time.
                 self.audio_player.player.play();
 
                 self.last_tick = Instant::now();
@@ -908,19 +908,19 @@ impl Application for Yamp {
 
                 let source = Decoder::new(file).unwrap();
 
-                // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
-                // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
-                // (_STREAM IS A FIELD IN THIS STRUCT)
+                // Turns out I just had wrap this guy in a struct,
+                // I think because the stream needs to stay alive or audio won't play.
+                // (_stream is a field in this struct)
                 // (tested without the _stream field and audio didn't work jsyk)
-                // SLEEP UNTIL END IS COMPLETELY UNNECESSARY IN THIS CASE BECAUSE
-                // LIBCOSMIC KEEPS THE MAIN THREAD ALIVE
-                // AND I DON'T HAVE TO MAKE A SECOND THREAD BECAUSE RODIO IS ALREADY DOING THAT
-                // IN THE BACKGROUND
-                // HOLY SMOKES
+                // Sleep until end is completely unnecessary in this case because
+                // libcosmic keeps the main thread alive.
+                // And I don't have to make a second thread because
+                // rodio is already doing that in the background
+                // holy smokes
                 self.audio_player.player.append(source);
-                // WHEN YOU APPEND A SOURCE TO THE PLAYER IT IMMEDIATELY STARTS PLAYING
-                // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
-                // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
+                // When you append a source to the player it immediately starts playing
+                // but if you pause and append another thing it don't start playing again
+                // therefore, we make sure to call play every time.
                 self.audio_player.player.play();
             }
 
@@ -961,19 +961,7 @@ impl Application for Yamp {
                 let source = Decoder::new(file).unwrap();
 
 
-                // TURNS OUT I JUST HAD WRAP THIS SUCKER IN A STRUCT
-                // I THINK BECAUSE THE STREAM NEEDS TO STAY ALIVE OR AUDIO WON'T PLAY
-                // (_STREAM IS A FIELD IN THIS STRUCT)
-                // (tested without the _stream field and audio didn't work jsyk)
-                // SLEEP UNTIL END IS COMPLETELY UNNECESSARY IN THIS CASE BECAUSE
-                // LIBCOSMIC KEEPS THE MAIN THREAD ALIVE
-                // AND I DON'T HAVE TO MAKE A SECOND THREAD BECAUSE RODIO IS ALREADY DOING THAT
-                // IN THE BACKGROUND
-                // HOLY SMOKES
                 self.audio_player.player.append(source);
-                // WHEN YOU APPEND A SOURCE TO THE PLAYER IT IMMEDIATELY STARTS PLAYING
-                // BUT IF YOU PAUSE AND APPEND ANOTHER THING IT DON'T START PLAYING AGAIN
-                // THEREFORE, WE MAKE SURE TO CALL PLAY EVERY TIME.
                 self.audio_player.player.play();
                 //self.audio_player.player.sleep_until_end();
 
@@ -1120,7 +1108,7 @@ fn print_format_sans_path(probed: &mut ProbeResult) {
 
 
 fn read_media_metadata() {
-    let path = Path::new("/home/ben/MEGA/Music/HQ/Deejay Verstyle/Parappa The Rapper Remix Album/Deejay Verstyle - Parappa The Rapper Remix Album - 01 Happy Forever -Intro-.flac");
+    let path = Path::new("");
 
     // Create a hint to help the format registry guess what format reader is appropriate.
     let mut hint = Hint::new();
