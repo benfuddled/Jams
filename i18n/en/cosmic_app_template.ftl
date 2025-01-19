@@ -1,6 +1,14 @@
 app-title = YAMP
 about = About
 view = View
-welcome = Welcome to YAMP! 🎷
+welcome = Welcome to YAMP!
+spelled-out = (...Yet Another Music Player)
 page-2-description = This is page 2.
 scan = gimme the files
+play = play that music
+get-files = open file picker
+debug = Debug
+debug-play = Play Sample File
+debug-file-listing = List Files From Dir
+debug-file-play = Open File And Play
+add-folder = Add Folder
