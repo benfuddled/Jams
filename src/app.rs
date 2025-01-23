@@ -6,7 +6,7 @@ use std::thread;
 
 use crate::{fl, player};
 use std::fs;
-use cosmic::app::{Command, Core};
+use cosmic::app::{Task, Core, context_drawer};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, keyboard, Length, Subscription, time};
 use cosmic::widget::{self, button, Button, Column, Container, icon, menu, nav_bar, Row, slider, text};
@@ -27,7 +27,7 @@ use rodio::source::SineWave;
 // };
 
 use cosmic::dialog::file_chooser::{self, FileFilter};
-use cosmic::iced_widget::Scrollable;
+use cosmic::iced_widget::{Scrollable};
 use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
 use symphonia::core::errors::Error;
 use symphonia::core::formats::{Cue, FormatOptions, Track};
@@ -206,8 +206,8 @@ impl Application for Yamp {
     ///
     /// - `core` is used to passed on for you by libcosmic to use in the core of your own application.
     /// - `flags` is used to pass in any data that your application needs to use before it starts.
-    /// - `Command` type is used to send messages to your application. `Command::none()` can be used to send no messages to your application.
-    fn init(core: Core, _flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    /// - `Task` type is used to send messages to your application. `Task::none()` can be used to send no messages to your application.
+    fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Self::Message>) {
         let mut nav = nav_bar::Model::default();
 
         nav.insert()
@@ -270,16 +270,16 @@ impl Application for Yamp {
             menu::root(fl!("view")),
             menu::items(
                 &self.key_binds,
-                vec![menu::Item::Button(fl!("about"), MenuAction::About)],
+                vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
             ),
         ),
                                       menu::Tree::with_children(
                                           menu::root(fl!("debug")),
                                           menu::items(
                                               &self.key_binds,
-                                              vec![menu::Item::Button(fl!("debug-play"), MenuAction::Play),
-                                                   menu::Item::Button(fl!("debug-file-listing"), MenuAction::DebugScan),
-                                                   menu::Item::Button(fl!("debug-file-play"), MenuAction::OpenFile)],
+                                              vec![menu::Item::Button(fl!("debug-play"), None, MenuAction::Play),
+                                                   menu::Item::Button(fl!("debug-file-listing"), None, MenuAction::DebugScan),
+                                                   menu::Item::Button(fl!("debug-file-play"), None, MenuAction::OpenFile)],
                                           ),
                                       )
         ]);
@@ -308,24 +308,21 @@ impl Application for Yamp {
                 //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
 
                 let mut file_txt_row = Row::new()
-                    .align_items(Alignment::Center)
+                    //.align_items(Alignment::Center)
                     .spacing(5)
                     .padding([6, 4, 6, 4]);
 
                 if (file.paused == true) {
-                    let play_icon = Container::new(icon::from_name("media-playback-start-symbolic"));
                     //let resume_txt = text("Resume");
-                    let button = button(play_icon).on_press(Message::ResumeCurrentTrack);
+                    let button = button::icon(icon::from_name("media-playback-start-symbolic")).on_press(Message::ResumeCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
                 } else if (file.playing == true) {
-                    let pause_icon = Container::new(icon::from_name("media-playback-pause-symbolic"));
                     //let playing_txt = text("Pause");
-                    let button = button(pause_icon).on_press(Message::PauseCurrentTrack);
+                    let button = button::icon(icon::from_name("media-playback-pause-symbolic")).on_press(Message::PauseCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
                 } else {
-                    let play_icon = Container::new(icon::from_name("media-playback-start-symbolic"));
                     //let paused_txt = text("Play");
-                    let button = button(play_icon).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
+                    let button = button::icon(icon::from_name("media-playback-start-symbolic")).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
                     file_txt_row = file_txt_row.push(button);
                 }
 
@@ -355,12 +352,11 @@ impl Application for Yamp {
 
             let mut controls_row = Row::new()
                 .spacing(10)
-                .align_items(Alignment::Center)
+                .align_y(Alignment::Center)
                 .height(Length::Fill);
 
             //let controls_button_prev_txt = text("Previous");
-            let back_icon = Container::new(icon::from_name("media-skip-backward-symbolic").size(16));
-            let controls_prev_button = button(back_icon)
+            let controls_prev_button = button::icon(icon::from_name("media-skip-backward-symbolic").size(16))
                 .width(36)
                 .height(36)
                 .padding([10, 0, 0, 10])
@@ -371,32 +367,29 @@ impl Application for Yamp {
             match &self.global_play_state {
                 PlayState::Playing => {
                     //let controls_button_txt = text("Pause");
-                    let play_icon = Container::new(icon::from_name("media-playback-pause-symbolic").size(24));
-                    let controls_pause_button = button(play_icon)
+                    let controls_pause_button = button::icon(icon::from_name("media-playback-pause-symbolic").size(24))
                         .width(50)
                         .height(50)
                         .padding([13, 0, 0, 13])
-                        .style(theme::Button::Suggested)
+                        .class(cosmic::style::Button::Suggested)
                         .on_press(Message::PauseCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
                 PlayState::Paused => {
                     //let controls_button_txt = text("Play");
-                    let pause_icon = Container::new(icon::from_name("media-playback-start-symbolic").size(24));
-                    let controls_pause_button = button(pause_icon)
+                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic").size(24))
                         .width(50)
                         .height(50)
                         .padding([13, 0, 0, 14])
-                        .style(theme::Button::Suggested)
+                        .class(cosmic::style::Button::Suggested)
                         .on_press(Message::ResumeCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
                 PlayState::Idle => {
                     //let controls_button_txt = text("This Button Is Disabled");
-                    let play_icon = Container::new(icon::from_name("media-playback-start-symbolic").size(24));
-                    let controls_pause_button = button(play_icon)
+                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic").size(24))
                         .padding([13, 0, 0, 14])
                         .width(50)
                         .height(50);
@@ -406,8 +399,7 @@ impl Application for Yamp {
             }
 
             //let controls_button_next_txt = text("Next");
-            let forward_icon = Container::new(icon::from_name("media-skip-forward-symbolic").size(16));
-            let controls_next_button = button(forward_icon)
+            let controls_next_button = button::icon(icon::from_name("media-skip-forward-symbolic").size(16))
                 .width(36)
                 .height(36)
                 .padding([10, 0, 0, 10])
@@ -419,7 +411,7 @@ impl Application for Yamp {
                 .push(controls_row)
                 .height(Length::Fixed(110.0))
                 .width(Length::Fill)
-                .align_items(Alignment::Center);
+                .align_x(Alignment::Center);
 
             let min_seek_position = self.seek_position.as_secs() / 60;
             let sec_seek_position = self.seek_position.as_secs() % 60;
@@ -444,7 +436,7 @@ impl Application for Yamp {
 
             let timing_row = Row::new()
                 .spacing(5)
-                .align_items(Alignment::Center)
+                .align_y(Alignment::Center)
                 .push(pos_txt)
                 .push(progress_scrubber)
                 .push(total_txt);
@@ -453,13 +445,13 @@ impl Application for Yamp {
             controls_col = controls_col.push(timing_row);
 
             let controls_container = Container::new(controls_col)
-                .style(cosmic::style::Container::ContextDrawer);
+                .class(cosmic::style::Container::ContextDrawer);
 
             window_col = window_col.push(scroll_container);
             window_col = window_col.push(controls_container);
         } else {
             let mut splash_screen = Column::new()
-                .align_items(Alignment::Center)
+                .align_x(Alignment::Center)
                 .spacing(15);
 
             let title = widget::text::title1(fl!("welcome"))
@@ -472,27 +464,27 @@ impl Application for Yamp {
 
             let subtitle = text::title2(fl!("spelled-out"))
                 .size(18)
-                .font(cosmic::font::FONT_MONO_REGULAR)
+                .font(cosmic::font::mono())
                 .line_height(cosmic::iced_core::text::LineHeight::Relative(2.5));
 
             let mut titles = Column::new()
-                .align_items(Alignment::Center);
+                .align_x(Alignment::Center);
 
             titles = titles.push(title);
             titles = titles.push(subtitle);
 
             splash_screen = splash_screen.push(titles);
 
-            let txt_open = text(fl!("add-folder")).size(20);
-            let txt_open_container = Container::new(txt_open).center_x();
-            let btn_open = button(txt_open_container)
+            //let txt_open = text(fl!("add-folder")).size(20);
+            // let txt_open_container = Container::new(txt_open).center_x();
+            let btn_open = button::link(fl!("add-folder"))
                 .padding([8, 18])
                 .on_press(Message::AddFolder);
 
             splash_screen = splash_screen.push(btn_open);
 
             let mut splash_screen_container = Row::new()
-                .align_items(Alignment::Center)
+                .align_y(Alignment::Center)
                 .width(Length::Fill)
                 .height(Length::Fill);
 
@@ -532,9 +524,9 @@ impl Application for Yamp {
     }
 
     /// Application messages are handled here. The application state can be modified based on
-    /// what message was received. Commands may be returned for asynchronous execution on a
+    /// what message was received. Tasks may be returned for asynchronous execution on a
     /// background thread managed by the application's executor.
-    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+    fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
             Message::WatchTick(now) => {
                 if let PlayState::Playing = &mut self.global_play_state {
@@ -565,7 +557,7 @@ impl Application for Yamp {
             }
 
             Message::AddFolder => {
-                return cosmic::command::future(async move {
+                return cosmic::task::future(async move {
                     let dialog = file_chooser::open::Dialog::new().title(fl!("add-folder"));
 
                     match dialog.open_folder().await {
@@ -806,7 +798,7 @@ impl Application for Yamp {
             // Creates a new open dialog.
             // https://github.com/pop-os/libcosmic/blob/master/examples/open-dialog/src/main.rs
             Message::OpenFile => {
-                return cosmic::command::future(async move {
+                return cosmic::task::future(async move {
                     eprintln!("opening new dialog");
 
                     #[cfg(feature = "rfd")]
@@ -991,9 +983,6 @@ impl Application for Yamp {
                     self.context_page = context_page;
                     self.core.window.show_context = true;
                 }
-
-                // Set the title of the context drawer.
-                self.set_context_title(context_page.title());
             }
             Message::Scrub(value) => {
                 self.scrub_value = value;
@@ -1005,22 +994,26 @@ impl Application for Yamp {
                 //println!("{}", value)
             }
         }
-        Command::none()
+        Task::none()
     }
 
     /// Display a context drawer if the context page is requested.
-    fn context_drawer(&self) -> Option<Element<Self::Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Self::Message>> {
         if !self.core.window.show_context {
             return None;
         }
 
         Some(match self.context_page {
-            ContextPage::About => self.about(),
+            ContextPage::About => context_drawer::context_drawer(
+                self.about(),
+                Message::ToggleContextPage(ContextPage::About),
+            )
+                .title(fl!("about")),
         })
     }
 
     /// Called when a nav item is selected.
-    fn on_nav_select(&mut self, id: nav_bar::Id) -> Command<Self::Message> {
+    fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<Self::Message> {
         // Activate the page in the model.
         self.nav.activate(id);
         self.update_titles()
@@ -1047,13 +1040,13 @@ impl Yamp {
             .push(icon)
             .push(title)
             .push(link)
-            .align_items(Alignment::Center)
+            //.align_items(Alignment::Center)
             .spacing(space_xxs)
             .into()
     }
 
     /// Updates the header and window titles.
-    pub fn update_titles(&mut self) -> Command<Message> {
+    pub fn update_titles(&mut self) -> Task<Message> {
         let mut window_title = fl!("app-title");
         let mut header_title = String::new();
 
