@@ -36,7 +36,7 @@ use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, V
 use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
 
-const REPOSITORY: &str = "https://github.com/edfloreshz/cosmic-app-template";
+const REPOSITORY: &str = "https://github.com/benfuddled/YAMP";
 
 /// This is the struct that represents your application.
 /// It is used to define the data that will be used by your application.
@@ -124,6 +124,7 @@ pub enum Page {
     Page1,
     Page2,
     Page3,
+    Page4,
 }
 
 #[derive(Default)]
@@ -213,18 +214,23 @@ impl Application for Yamp {
         nav.insert()
             .text("All Music")
             .data::<Page>(Page::Page1)
-            .icon(icon::from_name("applications-science-symbolic"))
+            .icon(icon::from_name("folder-music-symbolic"))
             .activate();
 
         nav.insert()
-            .text("Page 2")
+            .text("Songs")
             .data::<Page>(Page::Page2)
-            .icon(icon::from_name("applications-system-symbolic"));
+            .icon(icon::from_name("folder-music-symbolic"));
 
         nav.insert()
-            .text("Page 3")
+            .text("Albums")
             .data::<Page>(Page::Page3)
-            .icon(icon::from_name("applications-games-symbolic"));
+            .icon(icon::from_name("folder-music-symbolic"));
+
+        nav.insert()
+            .text("Artists")
+            .data::<Page>(Page::Page4)
+            .icon(icon::from_name("folder-music-symbolic"));
 
         let scanned_files = vec![];
 
