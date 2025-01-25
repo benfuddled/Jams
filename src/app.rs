@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::thread;
 
-use crate::{fl, player};
+use crate::{fl, icon_cache, player};
 use std::fs;
 use cosmic::app::{Task, Core, context_drawer};
 use cosmic::iced::alignment::{Horizontal, Vertical};
@@ -16,7 +16,7 @@ use log::{error, info};
 
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use rodio::{Decoder, OutputStream, Sink, source::Source};
 use rodio::source::SineWave;
@@ -35,8 +35,18 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, Value, Visual};
 use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
+use crate::icon_cache::IconCache;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/YAMP";
+
+lazy_static::lazy_static! {
+    static ref ICON_CACHE: Mutex<IconCache> = Mutex::new(IconCache::new());
+}
+
+pub fn icon_cache_get(name: &'static str, size: u16) -> widget::icon::Icon {
+    let mut icon_cache = ICON_CACHE.lock().unwrap();
+    icon_cache.get(name, size)
+}
 
 /// This is the struct that represents your application.
 /// It is used to define the data that will be used by your application.
@@ -214,23 +224,23 @@ impl Application for Yamp {
         nav.insert()
             .text("All Music")
             .data::<Page>(Page::Page1)
-            .icon(icon::from_name("view-list-symbolic"))
+            .icon(icon_cache_get("music-note-symbolic", 16))
             .activate();
 
         nav.insert()
             .text("Songs")
             .data::<Page>(Page::Page2)
-            .icon(icon::from_name("folder-music-symbolic"));
+            .icon(icon_cache_get("music-note-single-symbolic", 16));
 
         nav.insert()
             .text("Albums")
             .data::<Page>(Page::Page3)
-            .icon(icon::from_name("view-grid-symbolic"));
+            .icon(icon_cache_get("library-music-symbolic", 16));
 
         nav.insert()
             .text("Artists")
             .data::<Page>(Page::Page4)
-            .icon(icon::from_name("system-users-symbolic"));
+            .icon(icon_cache_get("music-artist-symbolic", 16));
 
         let scanned_files = vec![];
 

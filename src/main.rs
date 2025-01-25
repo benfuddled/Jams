@@ -31,6 +31,7 @@ mod core;
 mod player;
 mod output;
 mod resampler;
+mod icon_cache;
 
 /// The `cosmic::app::run()` function is the starting point of your application.
 /// It takes two arguments:
