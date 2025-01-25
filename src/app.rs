@@ -214,7 +214,7 @@ impl Application for Yamp {
         nav.insert()
             .text("All Music")
             .data::<Page>(Page::Page1)
-            .icon(icon::from_name("folder-music-symbolic"))
+            .icon(icon::from_name("view-list-symbolic"))
             .activate();
 
         nav.insert()
@@ -225,12 +225,12 @@ impl Application for Yamp {
         nav.insert()
             .text("Albums")
             .data::<Page>(Page::Page3)
-            .icon(icon::from_name("folder-music-symbolic"));
+            .icon(icon::from_name("view-grid-symbolic"));
 
         nav.insert()
             .text("Artists")
             .data::<Page>(Page::Page4)
-            .icon(icon::from_name("folder-music-symbolic"));
+            .icon(icon::from_name("system-users-symbolic"));
 
         let scanned_files = vec![];
 
