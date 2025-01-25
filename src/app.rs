@@ -314,7 +314,7 @@ impl Application for Yamp {
                 //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
 
                 let mut file_txt_row = Row::new()
-                    //.align_items(Alignment::Center)
+                    .align_y(Alignment::Center)
                     .spacing(5)
                     .padding([6, 4, 6, 4]);
 
@@ -362,10 +362,8 @@ impl Application for Yamp {
                 .height(Length::Fill);
 
             //let controls_button_prev_txt = text("Previous");
-            let controls_prev_button = button::icon(icon::from_name("media-skip-backward-symbolic").size(16))
-                .width(36)
-                .height(36)
-                .padding([10, 0, 0, 10])
+            let controls_prev_button = button::icon(icon::from_name("media-skip-backward-symbolic"))
+                .icon_size(16)
                 .on_press(Message::PauseCurrentTrack);
 
             controls_row = controls_row.push(controls_prev_button);
@@ -373,10 +371,9 @@ impl Application for Yamp {
             match &self.global_play_state {
                 PlayState::Playing => {
                     //let controls_button_txt = text("Pause");
-                    let controls_pause_button = button::icon(icon::from_name("media-playback-pause-symbolic").size(24))
-                        .width(50)
-                        .height(50)
-                        .padding([13, 0, 0, 13])
+                    let controls_pause_button = button::icon(icon::from_name("media-playback-pause-symbolic"))
+                        .icon_size(24)
+                        .padding([15, 15, 15, 15])
                         .class(cosmic::style::Button::Suggested)
                         .on_press(Message::PauseCurrentTrack);
 
@@ -384,10 +381,9 @@ impl Application for Yamp {
                 }
                 PlayState::Paused => {
                     //let controls_button_txt = text("Play");
-                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic").size(24))
-                        .width(50)
-                        .height(50)
-                        .padding([13, 0, 0, 14])
+                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                        .icon_size(24)
+                        .padding([15, 15, 15, 15])
                         .class(cosmic::style::Button::Suggested)
                         .on_press(Message::ResumeCurrentTrack);
 
@@ -395,20 +391,18 @@ impl Application for Yamp {
                 }
                 PlayState::Idle => {
                     //let controls_button_txt = text("This Button Is Disabled");
-                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic").size(24))
-                        .padding([13, 0, 0, 14])
-                        .width(50)
-                        .height(50);
+                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                        .icon_size(24)
+                        .padding([15, 15, 15, 15])
+                        .class(cosmic::style::Button::Icon);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
             }
 
             //let controls_button_next_txt = text("Next");
-            let controls_next_button = button::icon(icon::from_name("media-skip-forward-symbolic").size(16))
-                .width(36)
-                .height(36)
-                .padding([10, 0, 0, 10])
+            let controls_next_button = button::icon(icon::from_name("media-skip-forward-symbolic"))
+                .icon_size(16)
                 .on_press(Message::PauseCurrentTrack);
 
             let controls_row = controls_row.push(controls_next_button);
@@ -484,7 +478,9 @@ impl Application for Yamp {
             //let txt_open = text(fl!("add-folder")).size(20);
             // let txt_open_container = Container::new(txt_open).center_x();
             let btn_open = button::link(fl!("add-folder"))
-                .padding([8, 18])
+                .font_size(20)
+                .class(cosmic::style::Button::Suggested)
+                .padding([16, 32])
                 .on_press(Message::AddFolder);
 
             splash_screen = splash_screen.push(btn_open);
