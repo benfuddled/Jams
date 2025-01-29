@@ -1,0 +1,14 @@
+app-title = YAMP
+about = Om
+view = Visa
+welcome = Välkommen till YAMP!
+spelled-out = (...Yet Another Music Player)
+page-2-description = Detta är sida 2.
+scan = ge mig filerna
+play = spela den där musiken
+get-files = öppna filväljaren
+debug = Felsökning
+debug-play = Spela upp exempelfil
+debug-file-listing = Lista filer från katalog
+debug-file-play = Öppna fil och spela upp
+add-folder = Lägg till katalog
