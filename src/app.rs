@@ -1,41 +1,43 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use crate::{fl, icon_cache, player};
-use std::fs;
-use cosmic::app::{Task, Core, context_drawer};
+use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, keyboard, Length, Subscription, time};
-use cosmic::widget::{self, button, Button, Column, Container, icon, menu, nav_bar, Row, slider, text};
-use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
+use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
 use cosmic::iced_core;
+use cosmic::widget::{
+    self, button, icon, menu, nav_bar, slider, text, Button, Column, Container, Row,
+};
+use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use log::{error, info};
+use std::fs;
 
+use rodio::source::SineWave;
+use rodio::{source::Source, Decoder, OutputStream, Sink};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use rodio::{Decoder, OutputStream, Sink, source::Source};
-use rodio::source::SineWave;
 
 // use cosmic_files::{
 //     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
 //     mime_icon::{mime_for_path, mime_icon},
 // };
 
+use crate::icon_cache::IconCache;
 use cosmic::dialog::file_chooser::{self, FileFilter};
-use cosmic::iced_widget::{Scrollable};
-use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
+use cosmic::iced_widget::Scrollable;
+use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error;
 use symphonia::core::formats::{Cue, FormatOptions, Track};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, Value, Visual};
 use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
-use crate::icon_cache::IconCache;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/YAMP";
 
@@ -67,7 +69,7 @@ pub struct Yamp {
     current_track_duration: Duration,
     seek_position: Duration,
     last_tick: Instant,
-    scrub_value: u8
+    scrub_value: u8,
 }
 
 /// The AudioPlayer struct handles audio playback using the rodio backend.
@@ -92,7 +94,7 @@ pub struct MusicFile {
     artist: String,
     album: String,
     album_artist: String,
-    date: String
+    date: String,
 }
 
 // #[derive(Default)]
@@ -174,9 +176,9 @@ impl menu::action::MenuAction for MenuAction {
     fn message(&self) -> Self::Message {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
-            MenuAction::Play => { Message::Play }
-            MenuAction::DebugScan => { Message::DebugScan }
-            MenuAction::OpenFile => { Message::OpenFile }
+            MenuAction::Play => Message::Play,
+            MenuAction::DebugScan => Message::DebugScan,
+            MenuAction::OpenFile => Message::OpenFile,
         }
     }
 }
@@ -253,7 +255,7 @@ impl Application for Yamp {
         let mut audio_player = RodioAudioPlayer {
             player,
             _stream,
-            content
+            content,
         };
 
         let mut global_play_state: PlayState = PlayState::default();
@@ -270,10 +272,8 @@ impl Application for Yamp {
             scrub_value: 50,
             current_track_duration: Duration::default(),
             seek_position: Duration::default(),
-            last_tick: Instant::now()
+            last_tick: Instant::now(),
         };
-
-
 
         let command = app.update_titles();
 
@@ -282,22 +282,25 @@ impl Application for Yamp {
 
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        let menu_bar = menu::bar(vec![menu::Tree::with_children(
-            menu::root(fl!("view")),
-            menu::items(
-                &self.key_binds,
-                vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
+        let menu_bar = menu::bar(vec![
+            menu::Tree::with_children(
+                menu::root(fl!("view")),
+                menu::items(
+                    &self.key_binds,
+                    vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
+                ),
             ),
-        ),
-                                      menu::Tree::with_children(
-                                          menu::root(fl!("debug")),
-                                          menu::items(
-                                              &self.key_binds,
-                                              vec![menu::Item::Button(fl!("debug-play"), None, MenuAction::Play),
-                                                   menu::Item::Button(fl!("debug-file-listing"), None, MenuAction::DebugScan),
-                                                   menu::Item::Button(fl!("debug-file-play"), None, MenuAction::OpenFile)],
-                                          ),
-                                      )
+            menu::Tree::with_children(
+                menu::root(fl!("debug")),
+                menu::items(
+                    &self.key_binds,
+                    vec![
+                        menu::Item::Button(fl!("debug-play"), None, MenuAction::Play),
+                        menu::Item::Button(fl!("debug-file-listing"), None, MenuAction::DebugScan),
+                        menu::Item::Button(fl!("debug-file-play"), None, MenuAction::OpenFile),
+                    ],
+                ),
+            ),
         ]);
 
         vec![menu_bar.into()]
@@ -330,15 +333,18 @@ impl Application for Yamp {
 
                 if (file.paused == true) {
                     //let resume_txt = text("Resume");
-                    let button = button::icon(icon::from_name("media-playback-start-symbolic")).on_press(Message::ResumeCurrentTrack);
+                    let button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                        .on_press(Message::ResumeCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
                 } else if (file.playing == true) {
                     //let playing_txt = text("Pause");
-                    let button = button::icon(icon::from_name("media-playback-pause-symbolic")).on_press(Message::PauseCurrentTrack);
+                    let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
+                        .on_press(Message::PauseCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
                 } else {
                     //let paused_txt = text("Play");
-                    let button = button::icon(icon::from_name("media-playback-start-symbolic")).on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
+                    let button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                        .on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
                     file_txt_row = file_txt_row.push(button);
                 }
 
@@ -359,9 +365,12 @@ impl Application for Yamp {
                 // col = col.push(file_txt_container);
             }
 
-
-            let scroll_list = Scrollable::new(file_col).height(Length::Fill).width(Length::Fill);
-            let scroll_container = Container::new(scroll_list).height(Length::Fill).width(Length::Fill);
+            let scroll_list = Scrollable::new(file_col)
+                .height(Length::Fill)
+                .width(Length::Fill);
+            let scroll_container = Container::new(scroll_list)
+                .height(Length::Fill)
+                .width(Length::Fill);
 
             // let paused_txt = text("Play");
             // let button = button(paused_txt);
@@ -372,39 +381,43 @@ impl Application for Yamp {
                 .height(Length::Fill);
 
             //let controls_button_prev_txt = text("Previous");
-            let controls_prev_button = button::icon(icon::from_name("media-skip-backward-symbolic"))
-                .icon_size(16)
-                .on_press(Message::PauseCurrentTrack);
+            let controls_prev_button =
+                button::icon(icon::from_name("media-skip-backward-symbolic"))
+                    .icon_size(16)
+                    .on_press(Message::PauseCurrentTrack);
 
             controls_row = controls_row.push(controls_prev_button);
 
             match &self.global_play_state {
                 PlayState::Playing => {
                     //let controls_button_txt = text("Pause");
-                    let controls_pause_button = button::icon(icon::from_name("media-playback-pause-symbolic"))
-                        .icon_size(24)
-                        .padding([15, 15, 15, 15])
-                        .class(cosmic::style::Button::Suggested)
-                        .on_press(Message::PauseCurrentTrack);
+                    let controls_pause_button =
+                        button::icon(icon::from_name("media-playback-pause-symbolic"))
+                            .icon_size(24)
+                            .padding([15, 15, 15, 15])
+                            .class(cosmic::style::Button::Suggested)
+                            .on_press(Message::PauseCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
                 PlayState::Paused => {
                     //let controls_button_txt = text("Play");
-                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .icon_size(24)
-                        .padding([15, 15, 15, 15])
-                        .class(cosmic::style::Button::Suggested)
-                        .on_press(Message::ResumeCurrentTrack);
+                    let controls_pause_button =
+                        button::icon(icon::from_name("media-playback-start-symbolic"))
+                            .icon_size(24)
+                            .padding([15, 15, 15, 15])
+                            .class(cosmic::style::Button::Suggested)
+                            .on_press(Message::ResumeCurrentTrack);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
                 PlayState::Idle => {
                     //let controls_button_txt = text("This Button Is Disabled");
-                    let controls_pause_button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .icon_size(24)
-                        .padding([15, 15, 15, 15])
-                        .class(cosmic::style::Button::Icon);
+                    let controls_pause_button =
+                        button::icon(icon::from_name("media-playback-start-symbolic"))
+                            .icon_size(24)
+                            .padding([15, 15, 15, 15])
+                            .class(cosmic::style::Button::Icon);
 
                     controls_row = controls_row.push(controls_pause_button);
                 }
@@ -443,7 +456,6 @@ impl Application for Yamp {
             let progress_scrubber = slider(0..=100, self.scrub_value, Message::Scrub).width(250);
             let total_txt = text(total).size(18);
 
-
             let timing_row = Row::new()
                 .spacing(5)
                 .align_y(Alignment::Center)
@@ -451,18 +463,15 @@ impl Application for Yamp {
                 .push(progress_scrubber)
                 .push(total_txt);
 
-
             controls_col = controls_col.push(timing_row);
 
-            let controls_container = Container::new(controls_col)
-                .class(cosmic::style::Container::ContextDrawer);
+            let controls_container =
+                Container::new(controls_col).class(cosmic::style::Container::ContextDrawer);
 
             window_col = window_col.push(scroll_container);
             window_col = window_col.push(controls_container);
         } else {
-            let mut splash_screen = Column::new()
-                .align_x(Alignment::Center)
-                .spacing(15);
+            let mut splash_screen = Column::new().align_x(Alignment::Center).spacing(15);
 
             let title = widget::text::title1(fl!("welcome"))
                 .size(48)
@@ -477,8 +486,7 @@ impl Application for Yamp {
                 .font(cosmic::font::mono())
                 .line_height(cosmic::iced_core::text::LineHeight::Relative(2.5));
 
-            let mut titles = Column::new()
-                .align_x(Alignment::Center);
+            let mut titles = Column::new().align_x(Alignment::Center);
 
             titles = titles.push(title);
             titles = titles.push(subtitle);
@@ -517,16 +525,11 @@ impl Application for Yamp {
             }
         };
 
-        fn handle_hotkey(
-            key: keyboard::Key,
-            _modifiers: keyboard::Modifiers,
-        ) -> Option<Message> {
+        fn handle_hotkey(key: keyboard::Key, _modifiers: keyboard::Modifiers) -> Option<Message> {
             use keyboard::key;
 
             match key.as_ref() {
-                keyboard::Key::Named(key::Named::Space) => {
-                    Some(Message::ResumeCurrentTrack)
-                }
+                keyboard::Key::Named(key::Named::Space) => Some(Message::ResumeCurrentTrack),
                 keyboard::Key::Character("r") => Some(Message::PauseCurrentTrack),
                 _ => None,
             }
@@ -546,7 +549,62 @@ impl Application for Yamp {
                     self.last_tick = now;
 
                     // update scrubber
-                    self.scrub_value = (self.seek_position.as_secs() as f64 / self.current_track_duration.as_secs() as f64 * 100.0) as u8;
+                    self.scrub_value = (self.seek_position.as_secs() as f64
+                        / self.current_track_duration.as_secs() as f64
+                        * 100.0) as u8;
+
+                    if (self.seek_position.as_millis() >= self.current_track_duration.as_millis())
+                    {
+                        println!("{}", String::from("End of track reached."));
+                        self.global_play_state = PlayState::Idle;
+
+                        // let next_track = self.scanned_files
+                        //     .iter()
+                        //     .filter(|x| x.playing == true).next();
+
+                        // let next_track = self.scanned_files
+                        //     .iter()
+                        //     .filter(|x| x.playing == true).cloned().next();
+                        //
+                        //
+                        //     // .next();
+                        //
+                        // for file in self.scanned_files.iter_mut() {
+                        //     if (file.playing == true) {
+                        //         file.playing = false;
+                        //     }
+                        // }
+
+                        // let next_index = self.scanned_files
+                        //     .iter()
+                        //     .position(|x| x.playing == true) + 1;
+
+                        let next_index = self.scanned_files
+                            .iter()
+                            .position(|x| x.playing == true)
+                            .unwrap() + 1;
+
+                        let next_file = self.scanned_files.get(next_index);
+
+                        match next_file {
+                            Some(track) => {
+                                println!("Moving to next track: {}", track.track_title);
+                                self.seek_position = Duration::new(0, 0);
+                                self.audio_player.player.stop();
+                                self.global_play_state = PlayState::Idle;
+                                self.current_track_duration = Duration::new(0, 0);
+                                self.switch_track(track.saved_path.clone());
+                            },
+                            None => {
+                                println!("End of list reached. Stopping playback.");
+                                self.seek_position = Duration::new(0, 0);
+                                self.audio_player.player.stop();
+                                self.global_play_state = PlayState::Idle;
+                                self.current_track_duration = Duration::new(0, 0);
+                            },
+                        }
+                        //Message::StartPlayingNewTrack();
+                    }
                 }
             }
             Message::LaunchUrl(url) => {
@@ -608,7 +666,12 @@ impl Application for Yamp {
                     let no_progress = false;
 
                     // Probe the media source stream for metadata and get the format reader.
-                    match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
+                    match symphonia::default::get_probe().format(
+                        &hint,
+                        mss,
+                        &format_opts,
+                        &metadata_opts,
+                    ) {
                         Ok(mut probed) => {
                             //print_tracks(probed.format.tracks());
 
@@ -638,7 +701,15 @@ impl Application for Yamp {
                                             track_title = tag.value.to_string();
                                             //println!("{}", &tag.value);
                                         }
-                                        println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                                        println!(
+                                            "{}",
+                                            print_tag_item(
+                                                idx,
+                                                &format!("{:?}", std_key),
+                                                &tag.value,
+                                                4
+                                            )
+                                        );
                                     }
                                     if let Some(std_key) = tag.std_key {
                                         if (&format!("{:?}", std_key) == "Album") {
@@ -662,13 +733,12 @@ impl Application for Yamp {
                                     }
                                     if let Some(std_key) = tag.std_key {
                                         if (&format!("{:?}", std_key) == "TrackNumber") {
-                                            track_number = tag.value.to_string().parse::<u16>().unwrap();
+                                            track_number =
+                                                tag.value.to_string().parse::<u16>().unwrap();
                                         }
                                     }
                                     idx += 1;
                                 }
-
-
 
                                 let mut music_file = MusicFile {
                                     saved_path,
@@ -690,7 +760,9 @@ impl Application for Yamp {
                                     info!("tags that are part of the container format are preferentially printed.");
                                     info!("not printing additional tags that were found while probing.");
                                 }
-                            } else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
+                            } else if let Some(metadata_rev) =
+                                probed.metadata.get().as_ref().and_then(|m| m.current())
+                            {
                                 //print_tags(metadata_rev.tags());
                                 // print_visuals(metadata_rev.visuals());
 
@@ -709,11 +781,18 @@ impl Application for Yamp {
                                             track_title = tag.value.to_string();
                                             //println!("{}", &tag.value);
                                         }
-                                        println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                                        println!(
+                                            "{}",
+                                            print_tag_item(
+                                                idx,
+                                                &format!("{:?}", std_key),
+                                                &tag.value,
+                                                4
+                                            )
+                                        );
                                     }
                                     idx += 1;
                                 }
-
 
                                 // FIXME: Figure out where this condition gets its tags
                                 let music_file = MusicFile {
@@ -742,44 +821,7 @@ impl Application for Yamp {
             }
 
             Message::StartPlayingNewTrack(file_path) => {
-                self.audio_player.player.stop();
-
-                for file in &mut self.scanned_files {
-                    file.paused = false;
-                    if (file.saved_path == file_path) {
-                        file.playing = true;
-                    } else {
-                        file.playing = false;
-                    }
-                }
-
-                let file = BufReader::new(File::open(file_path).unwrap());
-
-                let source = Decoder::new(file).unwrap();
-
-                println!("{:?}", source.total_duration());
-
-                self.current_track_duration = source.total_duration().unwrap();
-
-                // Turns out I just had wrap this guy in a struct,
-                // I think because the stream needs to stay alive or audio won't play.
-                // (_stream is a field in this struct)
-                // (tested without the _stream field and audio didn't work jsyk)
-                // Sleep until end is completely unnecessary in this case because
-                // libcosmic keeps the main thread alive.
-                // And I don't have to make a second thread because
-                // rodio is already doing that in the background
-                // holy smokes
-                self.audio_player.player.append(source);
-                // When you append a source to the player it immediately starts playing
-                // but if you pause and append another thing it don't start playing again
-                // therefore, we make sure to call play every time.
-                self.audio_player.player.play();
-
-                self.last_tick = Instant::now();
-                self.seek_position = Duration::default();
-
-                self.global_play_state = PlayState::Playing;
+                self.switch_track(file_path);
             }
 
             Message::PauseCurrentTrack => {
@@ -805,7 +847,6 @@ impl Application for Yamp {
                     }
                 }
             }
-
 
             // Creates a new open dialog.
             // https://github.com/pop-os/libcosmic/blob/master/examples/open-dialog/src/main.rs
@@ -929,7 +970,6 @@ impl Application for Yamp {
             }
 
             Message::Play => {
-
                 // let sinker = Arc::clone(&sink_ultimate);
                 //
                 //  let thing_ult = Arc::new(5);
@@ -960,10 +1000,10 @@ impl Application for Yamp {
                 //     println!("from thread2 {}", thing);
                 // });
 
-                let file = BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
+                let file =
+                    BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
 
                 let source = Decoder::new(file).unwrap();
-
 
                 self.audio_player.player.append(source);
                 self.audio_player.player.play();
@@ -972,7 +1012,6 @@ impl Application for Yamp {
                 println!("{}", self.thing);
 
                 //handle.join().unwrap();
-
 
                 // symphonia playback
                 // thread::spawn(|| {
@@ -1000,9 +1039,17 @@ impl Application for Yamp {
                 self.scrub_value = value;
                 let percent: f64 = (f64::from(value) / 100.0);
                 let pos = self.current_track_duration.as_secs() as f64 * percent;
-                println!("scrub {}, pos {}, percent {}", u64::from(value), pos, percent);
+                println!(
+                    "scrub {}, pos {}, percent {}",
+                    u64::from(value),
+                    pos,
+                    percent
+                );
                 self.seek_position = Duration::from_secs(pos as u64);
-                self.audio_player.player.try_seek(self.seek_position).unwrap();
+                self.audio_player
+                    .player
+                    .try_seek(self.seek_position)
+                    .unwrap();
                 //println!("{}", value)
             }
         }
@@ -1020,7 +1067,7 @@ impl Application for Yamp {
                 self.about(),
                 Message::ToggleContextPage(ContextPage::About),
             )
-                .title(fl!("about")),
+            .title(fl!("about")),
         })
     }
 
@@ -1071,14 +1118,48 @@ impl Yamp {
         self.set_header_title(header_title);
         self.set_window_title(window_title)
     }
+
+    pub fn switch_track(&mut self, file_path: PathBuf) {
+        self.audio_player.player.stop();
+
+        for file in &mut self.scanned_files {
+            file.paused = false;
+            if (file.saved_path == file_path) {
+                file.playing = true;
+            } else {
+                file.playing = false;
+            }
+        }
+
+        let file = BufReader::new(File::open(file_path).unwrap());
+
+        let source = Decoder::new(file).unwrap();
+
+        println!("{:?}", source.total_duration());
+
+        self.current_track_duration = source.total_duration().unwrap();
+
+        // Turns out I just had wrap this guy in a struct,
+        // I think because the stream needs to stay alive or audio won't play.
+        // (_stream is a field in this struct)
+        // (tested without the _stream field and audio didn't work jsyk)
+        // Sleep until end is completely unnecessary in this case because
+        // libcosmic keeps the main thread alive.
+        // And I don't have to make a second thread because
+        // rodio is already doing that in the background
+        // holy smokes
+        self.audio_player.player.append(source);
+        // When you append a source to the player it immediately starts playing
+        // but if you pause and append another thing it don't start playing again
+        // therefore, we make sure to call play every time.
+        self.audio_player.player.play();
+
+        self.last_tick = Instant::now();
+        self.seek_position = Duration::default();
+
+        self.global_play_state = PlayState::Playing;
+    }
 }
-
-
-
-
-
-
-
 
 fn print_format_sans_path(probed: &mut ProbeResult) {
     print_tracks(probed.format.tracks());
@@ -1094,8 +1175,7 @@ fn print_format_sans_path(probed: &mut ProbeResult) {
             info!("tags that are part of the container format are preferentially printed.");
             info!("not printing additional tags that were found while probing.");
         }
-    }
-    else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
+    } else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
         print_tags(metadata_rev.tags());
         print_visuals(metadata_rev.visuals());
     }
@@ -1104,13 +1184,6 @@ fn print_format_sans_path(probed: &mut ProbeResult) {
     // println!(":");
     // println!();
 }
-
-
-
-
-
-
-
 
 fn read_media_metadata() {
     let path = Path::new("");
@@ -1205,8 +1278,7 @@ fn print_format(path: &Path, probed: &mut ProbeResult) {
             info!("tags that are part of the container format are preferentially printed.");
             info!("not printing additional tags that were found while probing.");
         }
-    }
-    else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
+    } else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
         print_tags(metadata_rev.tags());
         print_visuals(metadata_rev.visuals());
     }
@@ -1235,8 +1307,7 @@ fn print_cues(cues: &[Cue]) {
                             "{}",
                             print_tag_item(tidx + 1, &format!("{:?}", std_key), &tag.value, 21)
                         );
-                    }
-                    else {
+                    } else {
                         println!("{}", print_tag_item(tidx + 1, &tag.key, &tag.value, 21));
                     }
                 }
@@ -1278,8 +1349,7 @@ fn print_tracks(tracks: &[Track]) {
 
             if let Some(codec) = symphonia::default::get_codecs().get_codec(params.codec) {
                 println!("{} ({})", codec.long_name, codec.short_name);
-            }
-            else {
+            } else {
                 println!("Unknown (#{})", params.codec);
             }
 
@@ -1348,8 +1418,7 @@ fn print_visuals(visuals: &[Visual]) {
             if let Some(usage) = visual.usage {
                 println!("|     [{:0>2}] Usage:      {:?}", idx + 1, usage);
                 println!("|          Media Type: {}", visual.media_type);
-            }
-            else {
+            } else {
                 println!("|     [{:0>2}] Media Type: {}", idx + 1, visual.media_type);
             }
             if let Some(dimensions) = visual.dimensions {
@@ -1377,8 +1446,7 @@ fn print_visuals(visuals: &[Visual]) {
                         "{}",
                         print_tag_item(tidx + 1, &format!("{:?}", std_key), &tag.value, 21)
                     );
-                }
-                else {
+                } else {
                     println!("{}", print_tag_item(tidx + 1, &tag.key, &tag.value, 21));
                 }
             }
@@ -1396,7 +1464,10 @@ fn print_tags(tags: &[Tag]) {
         // Print tags with a standard tag key first, these are the most common tags.
         for tag in tags.iter().filter(|tag| tag.is_known()) {
             if let Some(std_key) = tag.std_key {
-                println!("{}", print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4));
+                println!(
+                    "{}",
+                    print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4)
+                );
             }
             idx += 1;
         }
@@ -1412,7 +1483,13 @@ fn print_tags(tags: &[Tag]) {
 fn print_tag_item(idx: usize, key: &str, value: &Value, indent: usize) -> String {
     let key_str = match key.len() {
         0..=28 => format!("| {:w$}[{:0>2}] {:<28} : ", "", idx, key, w = indent),
-        _ => format!("| {:w$}[{:0>2}] {:.<28} : ", "", idx, key.split_at(26).0, w = indent),
+        _ => format!(
+            "| {:w$}[{:0>2}] {:.<28} : ",
+            "",
+            idx,
+            key.split_at(26).0,
+            w = indent
+        ),
     };
 
     let line_prefix = format!("\n| {:w$} : ", "", w = indent + 4 + 28 + 1);
