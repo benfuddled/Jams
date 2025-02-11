@@ -129,6 +129,8 @@ pub enum Message {
     ResumeCurrentTrack,
     WatchTick(Instant),
     Scrub(u8),
+    SkipNext,
+    SkipPrev,
 }
 
 /// Identifies a page in the application.
@@ -384,7 +386,7 @@ impl Application for Yamp {
             let controls_prev_button =
                 button::icon(icon::from_name("media-skip-backward-symbolic"))
                     .icon_size(16)
-                    .on_press(Message::PauseCurrentTrack);
+                    .on_press(Message::SkipPrev);
 
             controls_row = controls_row.push(controls_prev_button);
 
@@ -426,7 +428,7 @@ impl Application for Yamp {
             //let controls_button_next_txt = text("Next");
             let controls_next_button = button::icon(icon::from_name("media-skip-forward-symbolic"))
                 .icon_size(16)
-                .on_press(Message::PauseCurrentTrack);
+                .on_press(Message::SkipNext);
 
             let controls_row = controls_row.push(controls_next_button);
 
@@ -553,8 +555,7 @@ impl Application for Yamp {
                         / self.current_track_duration.as_secs() as f64
                         * 100.0) as u8;
 
-                    if (self.seek_position.as_millis() >= self.current_track_duration.as_millis())
-                    {
+                    if (self.seek_position.as_millis() >= self.current_track_duration.as_millis()) {
                         println!("{}", String::from("End of track reached."));
                         self.global_play_state = PlayState::Idle;
 
@@ -579,10 +580,12 @@ impl Application for Yamp {
                         //     .iter()
                         //     .position(|x| x.playing == true) + 1;
 
-                        let next_index = self.scanned_files
+                        let next_index = self
+                            .scanned_files
                             .iter()
                             .position(|x| x.playing == true)
-                            .unwrap() + 1;
+                            .unwrap()
+                            + 1;
 
                         let next_file = self.scanned_files.get(next_index);
 
@@ -594,16 +597,81 @@ impl Application for Yamp {
                                 self.global_play_state = PlayState::Idle;
                                 self.current_track_duration = Duration::new(0, 0);
                                 self.switch_track(track.saved_path.clone());
-                            },
+                            }
                             None => {
                                 println!("End of list reached. Stopping playback.");
                                 self.seek_position = Duration::new(0, 0);
                                 self.audio_player.player.stop();
                                 self.global_play_state = PlayState::Idle;
                                 self.current_track_duration = Duration::new(0, 0);
-                            },
+                            }
                         }
                         //Message::StartPlayingNewTrack();
+                    }
+                }
+            }
+            Message::SkipNext => {
+                let next_index = self
+                    .scanned_files
+                    .iter()
+                    .position(|x| x.playing == true || x.paused == true)
+                    .unwrap()
+                    + 1;
+
+                let next_file = self.scanned_files.get(next_index);
+
+                match next_file {
+                    Some(track) => {
+                        println!("Moving to next track: {}", track.track_title);
+                        self.seek_position = Duration::new(0, 0);
+                        self.audio_player.player.stop();
+                        self.global_play_state = PlayState::Idle;
+                        self.current_track_duration = Duration::new(0, 0);
+                        self.switch_track(track.saved_path.clone());
+                    }
+                    None => {
+                        println!("End of list reached. Stopping playback.");
+                        self.seek_position = Duration::new(0, 0);
+                        self.audio_player.player.stop();
+                        self.global_play_state = PlayState::Idle;
+                        self.current_track_duration = Duration::new(0, 0);
+                    }
+                }
+            }
+            Message::SkipPrev => {
+                let curr_index = self
+                    .scanned_files
+                    .iter()
+                    .position(|x| x.playing == true || x.paused == true);
+
+                match curr_index {
+                    Some(index) => {
+                        if (index == 0) {
+                            self.scrub(0);
+                        } else {
+                            let prev_file = self.scanned_files.get(index - 1);
+
+                            match prev_file {
+                                Some(track) => {
+                                    println!("Moving to prev track: {}", track.track_title);
+                                    self.seek_position = Duration::new(0, 0);
+                                    self.audio_player.player.stop();
+                                    self.global_play_state = PlayState::Idle;
+                                    self.current_track_duration = Duration::new(0, 0);
+                                    self.switch_track(track.saved_path.clone());
+                                }
+                                None => {
+                                    println!("End of list reached. Stopping playback.");
+                                    self.seek_position = Duration::new(0, 0);
+                                    self.audio_player.player.stop();
+                                    self.global_play_state = PlayState::Idle;
+                                    self.current_track_duration = Duration::new(0, 0);
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        println!("Can't move to previous track. No track currently playing.");
                     }
                 }
             }
@@ -1036,21 +1104,7 @@ impl Application for Yamp {
                 }
             }
             Message::Scrub(value) => {
-                self.scrub_value = value;
-                let percent: f64 = (f64::from(value) / 100.0);
-                let pos = self.current_track_duration.as_secs() as f64 * percent;
-                println!(
-                    "scrub {}, pos {}, percent {}",
-                    u64::from(value),
-                    pos,
-                    percent
-                );
-                self.seek_position = Duration::from_secs(pos as u64);
-                self.audio_player
-                    .player
-                    .try_seek(self.seek_position)
-                    .unwrap();
-                //println!("{}", value)
+                self.scrub(value);
             }
         }
         Task::none()
@@ -1158,6 +1212,23 @@ impl Yamp {
         self.seek_position = Duration::default();
 
         self.global_play_state = PlayState::Playing;
+    }
+
+    pub fn scrub(&mut self, value: u8) {
+        self.scrub_value = value;
+        let percent: f64 = (f64::from(value) / 100.0);
+        let pos = self.current_track_duration.as_secs() as f64 * percent;
+        println!(
+            "scrub {}, pos {}, percent {}",
+            u64::from(value),
+            pos,
+            percent
+        );
+        self.seek_position = Duration::from_secs(pos as u64);
+        self.audio_player
+            .player
+            .try_seek(self.seek_position)
+            .unwrap();
     }
 }
 
