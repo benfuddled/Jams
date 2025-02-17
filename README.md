@@ -1,4 +1,4 @@
-# YAMP (Yet Another Music Player)
+# Jams (formerly YAMP)
 
 An exercise in learning Rust and libcosmic.
 

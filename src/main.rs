@@ -23,14 +23,11 @@ use symphonia::core::units::{Time, TimeBase};
 use clap::{Arg, ArgMatches};
 use log::{error, info, warn};
 
-use app::Yamp;
+use app::Jams;
 
 /// The `app` module is used by convention to indicate the main component of our application.
 mod app;
 mod core;
-mod player;
-mod output;
-mod resampler;
 mod icon_cache;
 
 /// The `cosmic::app::run()` function is the starting point of your application.
@@ -41,5 +38,5 @@ mod icon_cache;
 fn main() -> cosmic::iced::Result {
     // For any error, return an exit code -1. Otherwise return the exit code provided.
     let settings = cosmic::app::Settings::default();
-    cosmic::app::run::<Yamp>(settings, ())
+    cosmic::app::run::<Jams>(settings, ())
 }

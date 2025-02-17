@@ -1,7 +1,7 @@
-app-title = YAMP
+app-title = Jams
 about = About
 view = View
-welcome = Welcome to YAMP!
+welcome = Welcome to Jams!
 spelled-out = (...Yet Another Music Player)
 page-2-description = This is page 2.
 scan = gimme the files

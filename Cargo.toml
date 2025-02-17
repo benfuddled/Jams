@@ -1,5 +1,5 @@
 [package]
-name = "cosmic-app-template"
+name = "jams"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0"
@@ -52,18 +52,18 @@ features = ["fluent-system", "desktop-requester"]
 # Edit here to customize the package metadata
 # Especially the Assets section
 [package.metadata.deb]
-maintainer = "Your Name, <your@email.com>"
-copyright = "2024 Your Name"
+maintainer = "Benjamin Richardson"
+copyright = "2025 Benjamin Richardson"
 # license-file = "LICENSE"
 extended-description = """\
-Describe your app here. \
+Yet another music player. \
 """
 depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
-    ["target/release/cosmic-app-template", "usr/bin/cosmic-app-template", "755"],
-    ["res/com.example.CosmicAppTemplate.metainfo.xml", "usr/share/metainfo/com.example.CosmicAppTemplate.metainfo.xml", "644"],
-    ["res/com.example.CosmicAppTemplate.desktop", "usr/share/applications/com.example.CosmicAppTemplate.desktop", "644"],
+    ["target/release/jams", "usr/bin/jams", "755"],
+    ["res/com.benfuddled.Jams.metainfo.xml", "usr/share/metainfo/com.benfuddled.Jams.metainfo.xml", "644"],
+    ["res/com.benfuddled.Jams.desktop", "usr/share/applications/com.benfuddled.Jams.desktop", "644"],
     #    ["res/icons/hicolor/", "usr/share/icons/hicolor/", "644"]
 ]

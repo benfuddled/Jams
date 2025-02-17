@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use crate::{fl, icon_cache, player};
+use crate::{fl, icon_cache};
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
@@ -39,7 +39,7 @@ use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, V
 use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
 
-const REPOSITORY: &str = "https://github.com/benfuddled/YAMP";
+const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 
 lazy_static::lazy_static! {
     static ref ICON_CACHE: Mutex<IconCache> = Mutex::new(IconCache::new());
@@ -52,7 +52,7 @@ pub fn icon_cache_get(name: &'static str, size: u16) -> widget::icon::Icon {
 
 /// This is the struct that represents your application.
 /// It is used to define the data that will be used by your application.
-pub struct Yamp {
+pub struct Jams {
     /// Application state which is managed by the COSMIC runtime.
     core: Core,
     /// Display a context drawer with the designated page if defined.
@@ -114,7 +114,6 @@ pub enum Message {
     LaunchUrl(String),
     ToggleContextPage(ContextPage),
     DebugScan,
-    Play,
     Cancelled,
     CloseError,
     Error(String),
@@ -167,7 +166,6 @@ impl ContextPage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuAction {
     About,
-    Play,
     DebugScan,
     OpenFile,
 }
@@ -178,7 +176,6 @@ impl menu::action::MenuAction for MenuAction {
     fn message(&self) -> Self::Message {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
-            MenuAction::Play => Message::Play,
             MenuAction::DebugScan => Message::DebugScan,
             MenuAction::OpenFile => Message::OpenFile,
         }
@@ -193,14 +190,14 @@ impl menu::action::MenuAction for MenuAction {
 /// - `Flags` is the data that your application needs to use before it starts.
 /// - `Message` is the enum that contains all the possible variants that your application will need to transmit messages.
 /// - `APP_ID` is the unique identifier of your application.
-impl Application for Yamp {
+impl Application for Jams {
     type Executor = cosmic::executor::Default;
 
     type Flags = ();
 
     type Message = Message;
 
-    const APP_ID: &'static str = "com.example.CosmicAppTemplate";
+    const APP_ID: &'static str = "com.benfuddled.Jams";
 
     fn core(&self) -> &Core {
         &self.core
@@ -262,7 +259,7 @@ impl Application for Yamp {
 
         let mut global_play_state: PlayState = PlayState::default();
 
-        let mut app = Yamp {
+        let mut app = Jams {
             core,
             context_page: ContextPage::default(),
             key_binds: HashMap::new(),
@@ -297,7 +294,6 @@ impl Application for Yamp {
                 menu::items(
                     &self.key_binds,
                     vec![
-                        menu::Item::Button(fl!("debug-play"), None, MenuAction::Play),
                         menu::Item::Button(fl!("debug-file-listing"), None, MenuAction::DebugScan),
                         menu::Item::Button(fl!("debug-file-play"), None, MenuAction::OpenFile),
                     ],
@@ -1037,62 +1033,6 @@ impl Application for Yamp {
                 self.audio_player.player.play();
             }
 
-            Message::Play => {
-                // let sinker = Arc::clone(&sink_ultimate);
-                //
-                //  let thing_ult = Arc::new(5);
-                //  let thing = Arc::clone(&thing_ult);
-
-                // _stream must live as long as the sink
-                // let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-                // let sink_ultimate = Arc::new(Sink::try_new(&stream_handle).unwrap());
-                // let sinker_ultimate = Arc::clone(&sink_ultimate);
-
-                // let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-                // let sinker_ultimate = Sink::try_new(&stream_handle).unwrap();
-
-                // for some reason moving ownership of the sink into another thread (using Arc
-                // or not) the sound doesn't play and anything after sleep_until_end doesn't trigger.
-
-                // https://doc.rust-lang.org/book/ch13-01-closures.html
-                // let handle = thread::spawn(move || {
-                //     // Load a sound from a file, using a path relative to Cargo.toml
-                //     let file = BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
-                //     // Decode that sound file into a source
-                //     let source = Decoder::new(file).unwrap();
-                //     sinker_ultimate.append(source);
-                //     println!("from thread1 {}", thing);
-                //     // // The sound plays in a separate thread. This call will block the current thread until the sink
-                //     // // has finished playing all its queued sounds.
-                //     sinker_ultimate.sleep_until_end();
-                //     println!("from thread2 {}", thing);
-                // });
-
-                let file =
-                    BufReader::new(File::open("/home/ben/Projects/YAMP/res/sample.flac").unwrap());
-
-                let source = Decoder::new(file).unwrap();
-
-                self.audio_player.player.append(source);
-                self.audio_player.player.play();
-                //self.audio_player.player.sleep_until_end();
-
-                println!("{}", self.thing);
-
-                //handle.join().unwrap();
-
-                // symphonia playback
-                // thread::spawn(|| {
-                //     let code = match player::gobbo() {
-                //         Ok(code) => code,
-                //         Err(err) => {
-                //             error!("{}", err.to_string().to_lowercase());
-                //             -1
-                //         }
-                //     };
-                // });
-            }
-
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -1133,7 +1073,7 @@ impl Application for Yamp {
     }
 }
 
-impl Yamp {
+impl Jams {
     /// The about page for this app.
     pub fn about(&self) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;

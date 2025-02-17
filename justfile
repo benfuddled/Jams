@@ -1,5 +1,5 @@
-name := 'cosmic-app-template'
-export APPID := 'com.example.CosmicAppTemplate'
+name := 'jams'
+export APPID := 'com.example.Jams'
 
 rootdir := ''
 prefix := '/usr'
