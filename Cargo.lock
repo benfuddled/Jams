@@ -1086,32 +1086,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-app-template"
-version = "0.1.0"
-dependencies = [
- "arrayvec",
- "clap",
- "cpal 0.13.5",
- "i18n-embed",
- "i18n-embed-fl",
- "lazy_static",
- "libcosmic",
- "libpulse-binding",
- "libpulse-simple-binding",
- "log",
- "once_cell",
- "open",
- "pretty_env_logger",
- "rb",
- "rodio",
- "rubato",
- "rust-embed",
- "symphonia",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "cosmic-client-toolkit"
 version = "0.1.0"
 source = "git+https://github.com/pop-os/cosmic-protocols?rev=d218c76#d218c76b58c7a3b20dd5e7943f93fc306a1b81b8"
@@ -2953,6 +2927,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d75a2a4b1b190afb6f5425f10f6a8f959d2ea0b9c2b1d79553551850539e4674"
 
 [[package]]
+name = "jams"
+version = "0.1.0"
+dependencies = [
+ "arrayvec",
+ "clap",
+ "cpal 0.13.5",
+ "i18n-embed",
+ "i18n-embed-fl",
+ "lazy_static",
+ "libcosmic",
+ "libpulse-binding",
+ "libpulse-simple-binding",
+ "log",
+ "once_cell",
+ "open",
+ "pretty_env_logger",
+ "rb",
+ "rodio",
+ "rubato",
+ "rust-embed",
+ "symphonia",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "jni"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4726,16 +4726,15 @@ dependencies = [
 
 [[package]]
 name = "rodio"
-version = "0.19.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6006a627c1a38d37f3d3a85c6575418cfe34a5392d60a686d0071e1c8d427acb"
+checksum = "e7ceb6607dd738c99bc8cb28eff249b7cd5c8ec88b9db96c0608c1480d140fb1"
 dependencies = [
  "claxon",
  "cpal 0.15.3",
  "hound",
  "lewton",
  "symphonia",
- "thiserror",
 ]
 
 [[package]]
