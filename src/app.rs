@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::thread;
+use std::{io, thread};
 
 use crate::{fl, icon_cache};
 use cosmic::app::{context_drawer, Core, Task};
@@ -18,8 +18,9 @@ use std::fs;
 
 use rodio::source::SineWave;
 use rodio::{source::Source, Decoder, OutputStream, Sink};
-use std::fs::File;
+use std::fs::{DirEntry, File};
 use std::io::BufReader;
+use std::num::ParseIntError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -38,6 +39,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, Value, Visual};
 use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
+use walkdir::WalkDir;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 
@@ -707,11 +709,9 @@ impl Application for Jams {
             Message::AddSongsToLibrary(url) => {
                 let paths = fs::read_dir(url.to_file_path().unwrap()).unwrap();
 
-                for path in paths {
-                    //println!("Name: {}", path.unwrap().path().display());
-                    //self.scanned_files.push(path.unwrap().path());
-
-                    let new_path = path.unwrap().path().clone();
+                for entry in WalkDir::new(url.to_file_path().unwrap()).into_iter().filter_map(|e| e.ok())
+                {
+                    let new_path = entry.into_path().clone();
                     let saved_path = new_path.clone();
 
                     // Create a hint to help the format registry guess what format reader is appropriate.
@@ -797,8 +797,16 @@ impl Application for Jams {
                                     }
                                     if let Some(std_key) = tag.std_key {
                                         if (&format!("{:?}", std_key) == "TrackNumber") {
-                                            track_number =
-                                                tag.value.to_string().parse::<u16>().unwrap();
+
+                                            match tag.value.to_string().parse::<u16>() {
+                                                Ok(num) => {
+                                                    track_number = num;
+                                                }
+                                                Err(err) => {
+                                                    println!("Track {} invalid. Assigning 0. {}", tag.value, err);
+                                                    track_number = 0;
+                                                }
+                                            }
                                         }
                                     }
                                     idx += 1;
@@ -882,6 +890,182 @@ impl Application for Jams {
                         }
                     }
                 }
+
+                // for path in paths {
+                //     //println!("Name: {}", path.unwrap().path().display());
+                //     //self.scanned_files.push(path.unwrap().path());
+                //
+                //     let new_path = path.unwrap().path().clone();
+                //     let saved_path = new_path.clone();
+                //
+                //     // Create a hint to help the format registry guess what format reader is appropriate.
+                //     let mut hint = Hint::new();
+                //
+                //     // Open the media source.
+                //     let src = std::fs::File::open(new_path).expect("failed to open media");
+                //
+                //     // Create the media source stream.
+                //     let mss = MediaSourceStream::new(Box::new(src), Default::default());
+                //
+                //     // Use the default options for metadata and format readers.
+                //     let metadata_opts: MetadataOptions = Default::default();
+                //     let format_opts: FormatOptions = Default::default();
+                //
+                //     let no_progress = false;
+                //
+                //     // Probe the media source stream for metadata and get the format reader.
+                //     match symphonia::default::get_probe().format(
+                //         &hint,
+                //         mss,
+                //         &format_opts,
+                //         &metadata_opts,
+                //     ) {
+                //         Ok(mut probed) => {
+                //             //print_tracks(probed.format.tracks());
+                //
+                //             // Prefer metadata that's provided in the container format, over other tags found during the
+                //             // probe operation.
+                //             if let Some(metadata_rev) = probed.format.metadata().current() {
+                //                 //print_tags(metadata_rev.tags());
+                //                 // print_visuals(metadata_rev.visuals());
+                //
+                //                 let metadata = metadata_rev.clone();
+                //
+                //                 let tags = metadata.tags();
+                //
+                //                 let mut track_title = String::from("");
+                //                 let mut album = String::from("");
+                //                 let mut artist = String::from("");
+                //                 let mut album_artist = String::from("");
+                //                 let mut date = String::from("");
+                //                 let mut track_number = 0;
+                //
+                //                 let mut idx = 1;
+                //
+                //                 // Print tags with a standard tag key first, these are the most common tags.
+                //                 for tag in tags.iter().filter(|tag| tag.is_known()) {
+                //                     if let Some(std_key) = tag.std_key {
+                //                         if (&format!("{:?}", std_key) == "TrackTitle") {
+                //                             track_title = tag.value.to_string();
+                //                             //println!("{}", &tag.value);
+                //                         }
+                //                         println!(
+                //                             "{}",
+                //                             print_tag_item(
+                //                                 idx,
+                //                                 &format!("{:?}", std_key),
+                //                                 &tag.value,
+                //                                 4
+                //                             )
+                //                         );
+                //                     }
+                //                     if let Some(std_key) = tag.std_key {
+                //                         if (&format!("{:?}", std_key) == "Album") {
+                //                             album = tag.value.to_string();
+                //                         }
+                //                     }
+                //                     if let Some(std_key) = tag.std_key {
+                //                         if (&format!("{:?}", std_key) == "AlbumArtist") {
+                //                             album_artist = tag.value.to_string();
+                //                         }
+                //                     }
+                //                     if let Some(std_key) = tag.std_key {
+                //                         if (&format!("{:?}", std_key) == "Artist") {
+                //                             artist = tag.value.to_string();
+                //                         }
+                //                     }
+                //                     if let Some(std_key) = tag.std_key {
+                //                         if (&format!("{:?}", std_key) == "Date") {
+                //                             date = tag.value.to_string();
+                //                         }
+                //                     }
+                //                     if let Some(std_key) = tag.std_key {
+                //                         if (&format!("{:?}", std_key) == "TrackNumber") {
+                //                             track_number =
+                //                                 tag.value.to_string().parse::<u16>().unwrap();
+                //                         }
+                //                     }
+                //                     idx += 1;
+                //                 }
+                //
+                //                 let mut music_file = MusicFile {
+                //                     saved_path,
+                //                     metadata,
+                //                     track_title,
+                //                     track_number,
+                //                     artist,
+                //                     album,
+                //                     album_artist,
+                //                     playing: false,
+                //                     paused: false,
+                //                     date,
+                //                 };
+                //
+                //                 self.scanned_files.push(music_file);
+                //
+                //                 // Warn that certain tags are preferred.
+                //                 if probed.metadata.get().as_ref().is_some() {
+                //                     info!("tags that are part of the container format are preferentially printed.");
+                //                     info!("not printing additional tags that were found while probing.");
+                //                 }
+                //             } else if let Some(metadata_rev) =
+                //                 probed.metadata.get().as_ref().and_then(|m| m.current())
+                //             {
+                //                 //print_tags(metadata_rev.tags());
+                //                 // print_visuals(metadata_rev.visuals());
+                //
+                //                 let metadata = metadata_rev.clone();
+                //
+                //                 let tags = metadata.tags();
+                //
+                //                 let mut track_title = String::from(" ");
+                //
+                //                 let mut idx = 1;
+                //
+                //                 // Print tags with a standard tag key first, these are the most common tags.
+                //                 for tag in tags.iter().filter(|tag| tag.is_known()) {
+                //                     if let Some(std_key) = tag.std_key {
+                //                         if (&format!("{:?}", std_key) == "TrackTitle") {
+                //                             track_title = tag.value.to_string();
+                //                             //println!("{}", &tag.value);
+                //                         }
+                //                         println!(
+                //                             "{}",
+                //                             print_tag_item(
+                //                                 idx,
+                //                                 &format!("{:?}", std_key),
+                //                                 &tag.value,
+                //                                 4
+                //                             )
+                //                         );
+                //                     }
+                //                     idx += 1;
+                //                 }
+                //
+                //                 // FIXME: Figure out where this condition gets its tags
+                //                 let music_file = MusicFile {
+                //                     saved_path,
+                //                     metadata,
+                //                     track_title,
+                //                     track_number: 0,
+                //                     artist: "".to_string(),
+                //                     album: "".to_string(),
+                //                     album_artist: "".to_string(),
+                //                     playing: false,
+                //                     paused: false,
+                //                     date: "".to_string(),
+                //                 };
+                //
+                //                 self.scanned_files.push(music_file);
+                //             }
+                //             // print_format_sans_path(&mut probed);
+                //         }
+                //         Err(err) => {
+                //             // The input was not supported by any format reader.
+                //             info!("the input is not supported");
+                //         }
+                //     }
+                // }
             }
 
             Message::StartPlayingNewTrack(file_path) => {
@@ -1525,4 +1709,19 @@ fn print_tag_item(idx: usize, key: &str, value: &Value, indent: usize) -> String
     }
 
     out
+}
+
+fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                visit_dirs(&path, cb)?;
+            } else {
+                cb(&entry);
+            }
+        }
+    }
+    Ok(())
 }
