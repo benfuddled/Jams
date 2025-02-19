@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::thread;
+use std::{io, thread};
 
 use crate::{fl, icon_cache};
 use cosmic::app::{context_drawer, Core, Task};
@@ -18,8 +18,9 @@ use std::fs;
 
 use rodio::source::SineWave;
 use rodio::{source::Source, Decoder, OutputStream, Sink};
-use std::fs::File;
+use std::fs::{DirEntry, File};
 use std::io::BufReader;
+use std::num::ParseIntError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -38,6 +39,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, Value, Visual};
 use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
+use walkdir::WalkDir;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 
@@ -707,11 +709,9 @@ impl Application for Jams {
             Message::AddSongsToLibrary(url) => {
                 let paths = fs::read_dir(url.to_file_path().unwrap()).unwrap();
 
-                for path in paths {
-                    //println!("Name: {}", path.unwrap().path().display());
-                    //self.scanned_files.push(path.unwrap().path());
-
-                    let new_path = path.unwrap().path().clone();
+                for entry in WalkDir::new(url.to_file_path().unwrap()).into_iter().filter_map(|e| e.ok())
+                {
+                    let new_path = entry.into_path().clone();
                     let saved_path = new_path.clone();
 
                     // Create a hint to help the format registry guess what format reader is appropriate.
@@ -797,8 +797,16 @@ impl Application for Jams {
                                     }
                                     if let Some(std_key) = tag.std_key {
                                         if (&format!("{:?}", std_key) == "TrackNumber") {
-                                            track_number =
-                                                tag.value.to_string().parse::<u16>().unwrap();
+
+                                            match tag.value.to_string().parse::<u16>() {
+                                                Ok(num) => {
+                                                    track_number = num;
+                                                }
+                                                Err(err) => {
+                                                    println!("Track {} invalid. Assigning 0. {}", tag.value, err);
+                                                    track_number = 0;
+                                                }
+                                            }
                                         }
                                     }
                                     idx += 1;

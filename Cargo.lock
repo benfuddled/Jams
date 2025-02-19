@@ -2950,6 +2950,7 @@ dependencies = [
  "symphonia",
  "tokio",
  "url",
+ "walkdir",
 ]
 
 [[package]]
