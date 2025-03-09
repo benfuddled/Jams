@@ -1133,13 +1133,21 @@ impl Jams {
             }
         }
 
-        let file = BufReader::new(File::open(file_path).unwrap());
+        // let temp_duration = mp3_duration::from_path(&file_path).unwrap();
+        // println!("File duration: {:?}", temp_duration);
+
+        let file = BufReader::new(File::open(&file_path).unwrap());
 
         let source = Decoder::new(file).unwrap();
 
         println!("{:?}", source.total_duration());
 
-        self.current_track_duration = source.total_duration().unwrap();
+        self.current_track_duration = match source.total_duration() {
+            None => mp3_duration::from_path(&file_path).unwrap(),
+            Some(duration) => duration,
+        };
+
+        // self.current_track_duration = source.total_duration().unwrap();
 
         // Turns out I just had wrap this guy in a struct,
         // I think because the stream needs to stay alive or audio won't play.
