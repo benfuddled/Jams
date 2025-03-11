@@ -842,7 +842,12 @@ impl Application for Jams {
 
                                 let tags = metadata.tags();
 
-                                let mut track_title = String::from(" ");
+                                let mut track_title = String::from("");
+                                let mut album = String::from("");
+                                let mut artist = String::from("");
+                                let mut album_artist = String::from("");
+                                let mut date = String::from("");
+                                let mut track_number = 0;
 
                                 let mut idx = 1;
 
@@ -863,21 +868,54 @@ impl Application for Jams {
                                             )
                                         );
                                     }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "Album") {
+                                            album = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "AlbumArtist") {
+                                            album_artist = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "Artist") {
+                                            artist = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "Date") {
+                                            date = tag.value.to_string();
+                                        }
+                                    }
+                                    if let Some(std_key) = tag.std_key {
+                                        if (&format!("{:?}", std_key) == "TrackNumber") {
+
+                                            match tag.value.to_string().parse::<u16>() {
+                                                Ok(num) => {
+                                                    track_number = num;
+                                                }
+                                                Err(err) => {
+                                                    println!("Track {} invalid. Assigning 0. {}", tag.value, err);
+                                                    track_number = 0;
+                                                }
+                                            }
+                                        }
+                                    }
                                     idx += 1;
                                 }
 
-                                // FIXME: Figure out where this condition gets its tags
-                                let music_file = MusicFile {
+                                let mut music_file = MusicFile {
                                     saved_path,
                                     metadata,
                                     track_title,
-                                    track_number: 0,
-                                    artist: "".to_string(),
-                                    album: "".to_string(),
-                                    album_artist: "".to_string(),
+                                    track_number,
+                                    artist,
+                                    album,
+                                    album_artist,
                                     playing: false,
                                     paused: false,
-                                    date: "".to_string(),
+                                    date,
                                 };
 
                                 self.scanned_files.push(music_file);
@@ -1133,13 +1171,21 @@ impl Jams {
             }
         }
 
-        let file = BufReader::new(File::open(file_path).unwrap());
+        // let temp_duration = mp3_duration::from_path(&file_path).unwrap();
+        // println!("File duration: {:?}", temp_duration);
+
+        let file = BufReader::new(File::open(&file_path).unwrap());
 
         let source = Decoder::new(file).unwrap();
 
         println!("{:?}", source.total_duration());
 
-        self.current_track_duration = source.total_duration().unwrap();
+        self.current_track_duration = match source.total_duration() {
+            None => mp3_duration::from_path(&file_path).unwrap(),
+            Some(duration) => duration,
+        };
+
+        // self.current_track_duration = source.total_duration().unwrap();
 
         // Turns out I just had wrap this guy in a struct,
         // I think because the stream needs to stay alive or audio won't play.
