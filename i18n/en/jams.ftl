@@ -11,4 +11,5 @@ debug = Debug
 debug-play = Play Sample File
 debug-file-listing = List Files From Dir
 debug-file-play = Open File And Play
+debug-gstreamer-file = Gstreamer Open File And Play
 add-folder = Add Folder

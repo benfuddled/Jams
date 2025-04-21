@@ -41,6 +41,19 @@ use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
 use walkdir::WalkDir;
 
+use gstreamer as gst;
+use gstreamer::prelude::*;
+use gstreamer_player as gst_player;
+use gstreamer_player::PlayerVideoRenderer;
+
+use std::env;
+use gstreamer::glib;
+use gstreamer_pbutils::{
+    prelude::*, Discoverer, DiscovererContainerInfo, DiscovererInfo, DiscovererResult,
+    DiscovererStreamInfo,
+};
+
+
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 
 lazy_static::lazy_static! {
@@ -67,6 +80,7 @@ pub struct Jams {
     scanned_files: Vec<MusicFile>,
     thing: Arc<i32>,
     audio_player: RodioAudioPlayer,
+    alt_player: GStreamerPlayer,
     global_play_state: PlayState,
     current_track_duration: Duration,
     seek_position: Duration,
@@ -81,6 +95,13 @@ pub struct RodioAudioPlayer {
     /// Keep OutputStream alive. Otherwise audio playback will NOT work
     /// (sorry I don't make the rules)
     _stream: rodio::OutputStream,
+    /// Store content for rewind/replay
+    content: Vec<u8>,
+}
+
+pub struct GStreamerPlayer {
+    /// The sink responsible for managing the audio playback.
+    player: gst_player::Player,
     /// Store content for rewind/replay
     content: Vec<u8>,
 }
@@ -122,9 +143,12 @@ pub enum Message {
     FileRead(Url, String),
     OpenError(Arc<file_chooser::Error>),
     OpenFile,
+    OpenGSTFile,
     Selected(Url),
+    SelectedGST(Url),
     AddFolder,
     AddSongsToLibrary(Url),
+    AddSongsToLibraryGST(Url),
     StartPlayingNewTrack(PathBuf),
     PauseCurrentTrack,
     ResumeCurrentTrack,
@@ -170,6 +194,7 @@ pub enum MenuAction {
     About,
     DebugScan,
     OpenFile,
+    OpenGSTFile
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -180,6 +205,7 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
             MenuAction::DebugScan => Message::DebugScan,
             MenuAction::OpenFile => Message::OpenFile,
+            MenuAction::OpenGSTFile => Message::OpenGSTFile,
         }
     }
 }
@@ -259,6 +285,16 @@ impl Application for Jams {
             content,
         };
 
+        gst::init().expect("Could not initialize GStreamer.");
+        let dispatcher = gst_player::PlayerGMainContextSignalDispatcher::new(None);
+        let g_play = gst_player::Player::new(None::<PlayerVideoRenderer>, Some(dispatcher.upcast::<gst_player::PlayerSignalDispatcher>()),);
+        let g_content = Vec::new();
+
+        let mut alt_player = GStreamerPlayer {
+            player: g_play,
+            content: g_content,
+        };
+
         let mut global_play_state: PlayState = PlayState::default();
 
         let mut app = Jams {
@@ -269,6 +305,7 @@ impl Application for Jams {
             scanned_files,
             thing,
             audio_player,
+            alt_player,
             global_play_state,
             scrub_value: 50,
             current_track_duration: Duration::default(),
@@ -298,6 +335,7 @@ impl Application for Jams {
                     vec![
                         menu::Item::Button(fl!("debug-file-listing"), None, MenuAction::DebugScan),
                         menu::Item::Button(fl!("debug-file-play"), None, MenuAction::OpenFile),
+                        menu::Item::Button(fl!("debug-gstreamer-file"), None, MenuAction::OpenGSTFile),
                     ],
                 ),
             ),
@@ -543,6 +581,31 @@ impl Application for Jams {
     /// background thread managed by the application's executor.
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
+            Message::OpenGSTFile => {
+                return cosmic::task::future(async move {
+                    eprintln!("opening new dialog");
+
+                    #[cfg(feature = "rfd")]
+                    let filter = FileFilter::new("Music files").extension("mp3");
+
+                    #[cfg(feature = "xdg-portal")]
+                    let filter = FileFilter::new("Music files").glob("*.mp3");
+
+                    let dialog = file_chooser::open::Dialog::new()
+                        // Sets title of the dialog window.
+                        .title("Choose a file")
+                        // Accept only plain text files
+                        .filter(filter);
+
+                    match dialog.open_file().await {
+                        Ok(response) => Message::SelectedGST(response.url().to_owned()),
+
+                        Err(file_chooser::Error::Cancelled) => Message::Cancelled,
+
+                        Err(why) => Message::OpenError(Arc::new(why)),
+                    }
+                });
+            }
             Message::WatchTick(now) => {
                 if let PlayState::Playing = &mut self.global_play_state {
                     self.seek_position += now - self.last_tick;
@@ -697,7 +760,7 @@ impl Application for Jams {
                     let dialog = file_chooser::open::Dialog::new().title(fl!("add-folder"));
 
                     match dialog.open_folder().await {
-                        Ok(response) => Message::AddSongsToLibrary(response.url().to_owned()),
+                        Ok(response) => Message::AddSongsToLibraryGST(response.url().to_owned()),
 
                         Err(file_chooser::Error::Cancelled) => Message::Cancelled,
 
@@ -930,6 +993,37 @@ impl Application for Jams {
                 }
             }
 
+            Message::AddSongsToLibraryGST(url) => {
+                let paths = fs::read_dir(url.to_file_path().unwrap()).unwrap();
+
+                for entry in WalkDir::new(url.to_file_path().unwrap()).into_iter().filter_map(|e| e.ok())
+                {
+
+                    match Url::from_file_path(entry.into_path()) {
+                        Ok(url) => {
+                            println!("url {}", url);
+                            match run_discoverer(url.as_str()) {
+                                Ok(_) => {}
+                                Err(err) => eprintln!("Failed to run discovery: {err}"),
+                            }
+                        }
+                        Err(err) => eprintln!("Failed to run discovery: {err:?}"),
+                    }
+                    // match entry.into_path().to_str() {
+                    //     None => println!("Not a url lol"),
+                    //     Some(s) => {
+                    //         println!("{}", s);
+                    //         let url = Url::from_file_path(s).unwrap();
+                    //         println!("url {}", url);
+                    //         // match run_discoverer(url) {
+                    //         //     Ok(_) => {}
+                    //         //     Err(err) => eprintln!("Failed to run discovery: {err}"),
+                    //         // }
+                    //     },
+                    // };
+                }
+            }
+
             Message::StartPlayingNewTrack(file_path) => {
                 self.switch_track(file_path);
             }
@@ -1011,49 +1105,15 @@ impl Application for Jams {
             Message::CloseError => {}
             Message::FileRead(_, _) => {}
 
+            Message::SelectedGST(url) => {
+                //println!("{}", url.as_str());
+                match run_discoverer(url.as_str()) {
+                    Ok(_) => {}
+                    Err(err) => eprintln!("Failed to run discovery: {err}"),
+                }
+            }
+
             Message::Selected(url) => {
-                eprintln!("selected file");
-                //
-                // // Take existing file contents buffer to reuse its allocation.
-                // let mut contents = String::new();
-                // std::mem::swap(&mut contents, &mut self.file_contents);
-                //
-                // // Set the file's URL as the application title.
-                // self.set_header_title(url.to_string());
-                //
-                // // Reads the selected file into memory.
-                // return cosmic::command::future(async move {
-                //     // Check if its a valid local file path.
-                //     let path = match url.scheme() {
-                //         "file" => url.to_file_path().unwrap(),
-                //         other => {
-                //             return Message::Error(format!("{url} has unknown scheme: {other}"));
-                //         }
-                //     };
-                //
-                //     // Open the file by its path.
-                //     let mut file = match tokio::fs::File::open(&path).await {
-                //         Ok(file) => file,
-                //         Err(why) => {
-                //             return Message::Error(format!(
-                //                 "failed to open {}: {why}",
-                //                 path.display()
-                //             ));
-                //         }
-                //     };
-                //
-                //     // Read the file into our contents buffer.
-                //     contents.clear();
-                //
-                //     if let Err(why) = file.read_to_string(&mut contents).await {
-                //         return Message::Error(format!("failed to read {}: {why}", path.display()));
-                //     }
-                //
-                //     contents.shrink_to_fit();
-                //
-                //     // Send this back to the application.
-                //     Message::FileRead(url, contents)
-                // });
 
                 println!("{}", url.as_str());
                 println!("{:?}", url.to_file_path().unwrap());
@@ -1170,6 +1230,10 @@ impl Jams {
                 file.playing = false;
             }
         }
+
+        // self
+        //     .alt_player
+        //     .set_uri(Some(&format!("file:///{}", file_path.to_str().to_str()))).expect("TODO: panic message");
 
         // let temp_duration = mp3_duration::from_path(&file_path).unwrap();
         // println!("File duration: {:?}", temp_duration);
@@ -1580,3 +1644,163 @@ fn print_tag_item(idx: usize, key: &str, value: &Value, indent: usize) -> String
 
     out
 }
+
+
+
+// BEGIN GSTREAMER DISCOVERY STUFF
+
+fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
+    if let Ok(s) = v.get::<&str>() {
+        Some(s.to_string())
+    } else if let Ok(serialized) = v.serialize() {
+        Some(serialized.into())
+    } else {
+        None
+    }
+}
+
+fn print_stream_info(info: &DiscovererStreamInfo, depth: usize) {
+    let caps_str = if let Some(caps) = info.caps() {
+        if caps.is_fixed() {
+            gstreamer_pbutils::pb_utils_get_codec_description(&caps)
+        } else {
+            glib::GString::from(caps.to_string())
+        }
+    } else {
+        glib::GString::from("")
+    };
+
+    let stream_nick = info.stream_type_nick();
+    println!(
+        "{stream_nick:>indent$}: {caps_str}",
+        stream_nick = stream_nick,
+        indent = 2 * depth + stream_nick.len(),
+        caps_str = caps_str
+    );
+
+    if let Some(tags) = info.tags() {
+        println!("{:indent$}Tags:", " ", indent = 2 * depth);
+        for (tag, values) in tags.iter_generic() {
+            let mut tags_str = format!(
+                "{tag:>indent$}: ",
+                tag = tag,
+                indent = 2 * (2 + depth) + tag.len()
+            );
+            let mut tag_num = 0;
+            for value in values {
+                if let Some(s) = send_value_as_str(value) {
+                    if tag_num > 0 {
+                        tags_str.push_str(", ")
+                    }
+                    tags_str.push_str(&s[..]);
+                    tag_num += 1;
+                }
+            }
+
+            println!("{tags_str}");
+        }
+    };
+}
+
+/* Print information regarding a stream and its substreams, if any */
+fn print_topology(info: &DiscovererStreamInfo, depth: usize) {
+    //print_stream_info(info, depth);
+
+    if let Some(next) = info.next() {
+        print_topology(&next, depth + 1);
+    } else if let Some(container_info) = info.downcast_ref::<DiscovererContainerInfo>() {
+        for stream in container_info.streams() {
+            print_topology(&stream, depth + 1);
+        }
+    }
+}
+
+fn on_discovered(
+    _discoverer: &Discoverer,
+    discoverer_info: &DiscovererInfo,
+    error: Option<&glib::Error>,
+) {
+    let uri = discoverer_info.uri();
+    match discoverer_info.result() {
+        DiscovererResult::Ok => println!("Discovered {uri}"),
+        DiscovererResult::UriInvalid => println!("Invalid uri {uri}"),
+        DiscovererResult::Error => {
+            if let Some(msg) = error {
+                println!("{msg}");
+            } else {
+                println!("Unknown error")
+            }
+        }
+        DiscovererResult::Timeout => println!("Timeout"),
+        DiscovererResult::Busy => println!("Busy"),
+        DiscovererResult::MissingPlugins => {
+            if let Some(s) = discoverer_info.misc() {
+                println!("{s}");
+            }
+        }
+        _ => println!("Unknown result"),
+    }
+
+    if discoverer_info.result() != DiscovererResult::Ok {
+        return;
+    }
+
+    println!("Duration: {}", discoverer_info.duration().display());
+
+    // if let Some(tags) = discoverer_info.tags() {
+    //     println!("Tags:");
+    //     for (tag, values) in tags.iter_generic() {
+    //         print!("  {tag}: ");
+    //         values.for_each(|v| {
+    //             if let Some(s) = send_value_as_str(v) {
+    //                 println!("{s}")
+    //             }
+    //         })
+    //     }
+    // }
+    //
+    // println!(
+    //     "Seekable: {}",
+    //     if discoverer_info.is_seekable() {
+    //         "yes"
+    //     } else {
+    //         "no"
+    //     }
+    // );
+    //
+    // println!("Stream information:");
+
+    if let Some(stream_info) = discoverer_info.stream_info() {
+        print_topology(&stream_info, 1);
+    }
+}
+
+fn run_discoverer(uri: &str) -> Result<(), anyhow::Error> {
+    // let args: Vec<_> = env::args().collect();
+    // let uri: &str = if args.len() == 2 {
+    //     args[1].as_ref()
+    // } else {
+    //     "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"
+    // };
+
+    println!("Discovering {uri}");
+
+    let loop_ = glib::MainLoop::new(None, false);
+    let timeout = 5 * gst::ClockTime::SECOND;
+    let discoverer = gstreamer_pbutils::Discoverer::new(timeout)?;
+    discoverer.connect_discovered(on_discovered);
+    let loop_clone = loop_.clone();
+    discoverer.connect_finished(move |_| {
+        println!("\nFinished discovering");
+        loop_clone.quit();
+    });
+    discoverer.start();
+    discoverer.discover_uri_async(uri)?;
+
+    loop_.run();
+
+    discoverer.stop();
+
+    Ok(())
+}
+

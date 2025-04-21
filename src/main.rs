@@ -22,7 +22,9 @@ use symphonia::core::units::{Time, TimeBase};
 
 use clap::{Arg, ArgMatches};
 use log::{error, info, warn};
-
+use gstreamer as gst;
+use gst::prelude::*;
+use gstreamer::ffi::gst_element_set_state;
 use app::Jams;
 
 /// The `app` module is used by convention to indicate the main component of our application.
