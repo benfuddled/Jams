@@ -1000,6 +1000,10 @@ impl Application for Jams {
             Message::AddSongsToLibraryGST(url) => {
                 let paths = fs::read_dir(url.to_file_path().unwrap()).unwrap();
 
+                let loop_ = glib::MainLoop::new(None, false);
+                let timeout = 5 * gst::ClockTime::SECOND;
+                let discoverer = gstreamer_pbutils::Discoverer::new(timeout).unwrap();
+
                 for entry in WalkDir::new(url.to_file_path().unwrap()).into_iter().filter_map(|e| e.ok())
                 {
                     let is_audio = match is_audio_file(entry.path()) {
@@ -1019,9 +1023,6 @@ impl Application for Jams {
                                 let mut date = String::from("");
                                 let mut track_number = 0;
 
-                                let loop_ = glib::MainLoop::new(None, false);
-                                let timeout = 5 * gst::ClockTime::SECOND;
-                                let discoverer = gstreamer_pbutils::Discoverer::new(timeout).unwrap();
                                 let info = discoverer.discover_uri(url.as_str()).unwrap();
 
                                 match info.result() {
