@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{io, thread};
-
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use crate::{fl, icon_cache};
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
@@ -19,10 +20,12 @@ use std::fs;
 use rodio::source::SineWave;
 use rodio::{source::Source, Decoder, OutputStream, Sink};
 use std::fs::{DirEntry, File};
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::num::ParseIntError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use infer::Infer;
 
 // use cosmic_files::{
 //     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
@@ -47,6 +50,7 @@ use gstreamer_player as gst_player;
 use gstreamer_player::PlayerVideoRenderer;
 
 use std::env;
+use std::rc::Rc;
 use gstreamer::glib;
 use gstreamer_pbutils::{
     prelude::*, Discoverer, DiscovererContainerInfo, DiscovererInfo, DiscovererResult,
@@ -109,7 +113,7 @@ pub struct GStreamerPlayer {
 #[derive(Clone, Debug)]
 pub struct MusicFile {
     saved_path: PathBuf,
-    metadata: MetadataRevision,
+    //metadata: MetadataRevision,
     playing: bool,
     paused: bool,
     track_title: String,
@@ -877,7 +881,7 @@ impl Application for Jams {
 
                                 let mut music_file = MusicFile {
                                     saved_path,
-                                    metadata,
+                                    //metadata,
                                     track_title,
                                     track_number,
                                     artist,
@@ -970,7 +974,7 @@ impl Application for Jams {
 
                                 let mut music_file = MusicFile {
                                     saved_path,
-                                    metadata,
+                                    //metadata,
                                     track_title,
                                     track_number,
                                     artist,
@@ -998,29 +1002,123 @@ impl Application for Jams {
 
                 for entry in WalkDir::new(url.to_file_path().unwrap()).into_iter().filter_map(|e| e.ok())
                 {
+                    let is_audio = match is_audio_file(entry.path()) {
+                        Ok(is) => is,
+                        Err(err) => false
+                    };
+                    if entry.file_type().is_file() && is_audio {
+                        let saved_path = entry.clone().into_path();
+                        match Url::from_file_path(entry.into_path().clone()) {
+                            Ok(url) => {
+                                println!("url {}", url);
 
-                    match Url::from_file_path(entry.into_path()) {
-                        Ok(url) => {
-                            println!("url {}", url);
-                            match run_discoverer(url.as_str()) {
-                                Ok(_) => {}
-                                Err(err) => eprintln!("Failed to run discovery: {err}"),
+                                let mut track_title = String::from("");
+                                let mut album = String::from("");
+                                let mut artist = String::from("");
+                                let mut album_artist = String::from("");
+                                let mut date = String::from("");
+                                let mut track_number = 0;
+
+                                let loop_ = glib::MainLoop::new(None, false);
+                                let timeout = 5 * gst::ClockTime::SECOND;
+                                let discoverer = gstreamer_pbutils::Discoverer::new(timeout).unwrap();
+                                let info = discoverer.discover_uri(url.as_str()).unwrap();
+
+                                match info.result() {
+                                    DiscovererResult::Ok => println!("Discovered {url}"),
+                                    DiscovererResult::UriInvalid => println!("Invalid uri {url}"),
+                                    DiscovererResult::Error => {
+                                        println!("Error in DiscovererResult")
+                                        // if let Some(msg) = error {
+                                        //     println!("{msg}");
+                                        // } else {
+                                        //     println!("Unknown error")
+                                        // }
+                                    }
+                                    DiscovererResult::Timeout => println!("Timeout"),
+                                    DiscovererResult::Busy => println!("Busy"),
+                                    DiscovererResult::MissingPlugins => {
+                                        if let Some(s) = info.misc() {
+                                            println!("{s}");
+                                        }
+                                    }
+                                    _ => println!("Unknown result"),
+                                }
+
+                                if info.result() == DiscovererResult::Ok {
+                                    if let Some(tags) = info.tags() {
+                                        println!("Tags:");
+                                        for (tag, values) in tags.iter_generic() {
+                                            // println!("{:?}", values);
+                                            // print!("  {tag}: ");
+                                            if tag == "title" {
+                                                values.for_each(|v| {
+                                                    if let Some(s) = send_value_as_str(v) {
+                                                        track_title = s;
+                                                    }
+                                                })
+                                            } else if tag == "album" {
+                                                values.for_each(|v| {
+                                                    if let Some(s) = send_value_as_str(v) {
+                                                        album = s;
+                                                    }
+                                                })
+                                            } else if tag == "artist" {
+                                                values.for_each(|v| {
+                                                    if let Some(s) = send_value_as_str(v) {
+                                                        artist = s;
+                                                    }
+                                                })
+                                            } else if tag == "album-artist" {
+                                                values.for_each(|v| {
+                                                    if let Some(s) = send_value_as_str(v) {
+                                                        album_artist = s;
+                                                    }
+                                                })
+                                            } else if tag == "datetime" {
+                                                values.for_each(|v| {
+                                                    if let Some(s) = send_value_as_str(v) {
+                                                        date = s;
+                                                    }
+                                                })
+                                            } else if tag == "track-number" {
+                                                // values.for_each(|v| {
+                                                //     match v.to_string().parse::<u16>() {
+                                                //         Ok(num) => {
+                                                //             track_number = num;
+                                                //         }
+                                                //         Err(err) => {
+                                                //             //println!("Track {} invalid. Assigning 0. {}", v, err);
+                                                //             track_number = 0;
+                                                //         }
+                                                //     }
+                                                //     // if let Some(s) = send_value_as_str(v) {
+                                                //     //     track_number = s;
+                                                //     // }
+                                                // })
+                                            }
+                                        }
+                                    }
+                                }
+
+                                let mut music_file = MusicFile {
+                                    saved_path: saved_path.clone(),
+                                    //metadata,
+                                    track_title,
+                                    track_number,
+                                    artist,
+                                    album,
+                                    album_artist,
+                                    playing: false,
+                                    paused: false,
+                                    date,
+                                };
+
+                                self.scanned_files.push(music_file);
                             }
+                            Err(err) => eprintln!("Failed to run discovery: {err:?}"),
                         }
-                        Err(err) => eprintln!("Failed to run discovery: {err:?}"),
                     }
-                    // match entry.into_path().to_str() {
-                    //     None => println!("Not a url lol"),
-                    //     Some(s) => {
-                    //         println!("{}", s);
-                    //         let url = Url::from_file_path(s).unwrap();
-                    //         println!("url {}", url);
-                    //         // match run_discoverer(url) {
-                    //         //     Ok(_) => {}
-                    //         //     Err(err) => eprintln!("Failed to run discovery: {err}"),
-                    //         // }
-                    //     },
-                    // };
                 }
             }
 
@@ -1288,6 +1386,15 @@ impl Jams {
             .try_seek(self.seek_position)
             .unwrap();
     }
+}
+
+fn is_audio_file(path: &Path) -> std::io::Result<bool> {
+    let mut file = File::open(path)?;
+    let mut buf = [0; 1024]; // Read first KB for detection
+    file.read_exact(&mut buf)?;
+
+    let info = Infer::new();
+    Ok(info.is_audio(&buf))
 }
 
 fn print_format_sans_path(probed: &mut ProbeResult) {
