@@ -1023,99 +1023,104 @@ impl Application for Jams {
                                 let mut date = String::from("");
                                 let mut track_number = 0;
 
-                                let info = discoverer.discover_uri(url.as_str()).unwrap();
-
-                                match info.result() {
-                                    DiscovererResult::Ok => println!("Discovered {url}"),
-                                    DiscovererResult::UriInvalid => println!("Invalid uri {url}"),
-                                    DiscovererResult::Error => {
-                                        println!("Error in DiscovererResult")
-                                        // if let Some(msg) = error {
-                                        //     println!("{msg}");
-                                        // } else {
-                                        //     println!("Unknown error")
-                                        // }
+                                match discoverer.discover_uri(url.as_str()) {
+                                    Err(err) => {
+                                        println!("{:?}", err);
                                     }
-                                    DiscovererResult::Timeout => println!("Timeout"),
-                                    DiscovererResult::Busy => println!("Busy"),
-                                    DiscovererResult::MissingPlugins => {
-                                        if let Some(s) = info.misc() {
-                                            println!("{s}");
+                                    Ok(info) => {
+                                        match info.result() {
+                                            DiscovererResult::Ok => println!("Discovered {url}"),
+                                            DiscovererResult::UriInvalid => println!("Invalid uri {url}"),
+                                            DiscovererResult::Error => {
+                                                println!("Error in DiscovererResult")
+                                                // if let Some(msg) = error {
+                                                //     println!("{msg}");
+                                                // } else {
+                                                //     println!("Unknown error")
+                                                // }
+                                            }
+                                            DiscovererResult::Timeout => println!("Timeout"),
+                                            DiscovererResult::Busy => println!("Busy"),
+                                            DiscovererResult::MissingPlugins => {
+                                                if let Some(s) = info.misc() {
+                                                    println!("{s}");
+                                                }
+                                            }
+                                            _ => println!("Unknown result"),
                                         }
-                                    }
-                                    _ => println!("Unknown result"),
-                                }
 
-                                if info.result() == DiscovererResult::Ok {
-                                    if let Some(tags) = info.tags() {
-                                        println!("Tags:");
-                                        for (tag, values) in tags.iter_generic() {
-                                            // println!("{:?}", values);
-                                            // print!("  {tag}: ");
-                                            if tag == "title" {
-                                                values.for_each(|v| {
-                                                    if let Some(s) = send_value_as_str(v) {
-                                                        track_title = s;
+                                        if info.result() == DiscovererResult::Ok {
+                                            if let Some(tags) = info.tags() {
+                                                println!("Tags:");
+                                                for (tag, values) in tags.iter_generic() {
+                                                    // println!("{:?}", values);
+                                                    // print!("  {tag}: ");
+                                                    if tag == "title" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                track_title = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "album" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                album = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "artist" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                artist = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "album-artist" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                album_artist = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "datetime" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                date = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "track-number" {
+                                                        // values.for_each(|v| {
+                                                        //     match v.to_string().parse::<u16>() {
+                                                        //         Ok(num) => {
+                                                        //             track_number = num;
+                                                        //         }
+                                                        //         Err(err) => {
+                                                        //             //println!("Track {} invalid. Assigning 0. {}", v, err);
+                                                        //             track_number = 0;
+                                                        //         }
+                                                        //     }
+                                                        //     // if let Some(s) = send_value_as_str(v) {
+                                                        //     //     track_number = s;
+                                                        //     // }
+                                                        // })
                                                     }
-                                                })
-                                            } else if tag == "album" {
-                                                values.for_each(|v| {
-                                                    if let Some(s) = send_value_as_str(v) {
-                                                        album = s;
-                                                    }
-                                                })
-                                            } else if tag == "artist" {
-                                                values.for_each(|v| {
-                                                    if let Some(s) = send_value_as_str(v) {
-                                                        artist = s;
-                                                    }
-                                                })
-                                            } else if tag == "album-artist" {
-                                                values.for_each(|v| {
-                                                    if let Some(s) = send_value_as_str(v) {
-                                                        album_artist = s;
-                                                    }
-                                                })
-                                            } else if tag == "datetime" {
-                                                values.for_each(|v| {
-                                                    if let Some(s) = send_value_as_str(v) {
-                                                        date = s;
-                                                    }
-                                                })
-                                            } else if tag == "track-number" {
-                                                // values.for_each(|v| {
-                                                //     match v.to_string().parse::<u16>() {
-                                                //         Ok(num) => {
-                                                //             track_number = num;
-                                                //         }
-                                                //         Err(err) => {
-                                                //             //println!("Track {} invalid. Assigning 0. {}", v, err);
-                                                //             track_number = 0;
-                                                //         }
-                                                //     }
-                                                //     // if let Some(s) = send_value_as_str(v) {
-                                                //     //     track_number = s;
-                                                //     // }
-                                                // })
+                                                }
                                             }
                                         }
+
+                                        let mut music_file = MusicFile {
+                                            saved_path: saved_path.clone(),
+                                            //metadata,
+                                            track_title,
+                                            track_number,
+                                            artist,
+                                            album,
+                                            album_artist,
+                                            playing: false,
+                                            paused: false,
+                                            date,
+                                        };
+
+                                        self.scanned_files.push(music_file);
                                     }
                                 }
-
-                                let mut music_file = MusicFile {
-                                    saved_path: saved_path.clone(),
-                                    //metadata,
-                                    track_title,
-                                    track_number,
-                                    artist,
-                                    album,
-                                    album_artist,
-                                    playing: false,
-                                    paused: false,
-                                    date,
-                                };
-
-                                self.scanned_files.push(music_file);
                             }
                             Err(err) => eprintln!("Failed to run discovery: {err:?}"),
                         }
