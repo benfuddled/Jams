@@ -1,65 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::{io, thread};
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
-use crate::{fl, icon_cache};
+use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
-use cosmic::iced_core;
-use cosmic::widget::{
-    self, button, icon, menu, nav_bar, slider, text, Button, Column, Container, Row,
-};
+use cosmic::widget::{self, button, icon, menu, nav_bar, slider, text, Column, Container, Row};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
-use log::{error, info};
+use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 
-use rodio::source::SineWave;
-use rodio::{source::Source, Decoder, OutputStream, Sink};
-use std::fs::{DirEntry, File};
-use std::io::{BufReader, Read};
-use std::num::ParseIntError;
+use std::fs::File;
+use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow;
-
 use infer::Infer;
 
-// use cosmic_files::{
-//     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
-//     mime_icon::{mime_for_path, mime_icon},
-// };
-
 use crate::icon_cache::IconCache;
-use cosmic::dialog::file_chooser::{self, FileFilter};
+use cosmic::dialog::file_chooser::{self};
 use cosmic::iced_widget::Scrollable;
-use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
-use symphonia::core::errors::Error;
-use symphonia::core::formats::{Cue, FormatOptions, Track};
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, Value, Visual};
-use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
 use walkdir::WalkDir;
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
-use gstreamer_player as gst_player;
-use gstreamer_player::PlayerVideoRenderer;
-
-use gstreamer_play as gst_play;
-
-use std::env;
-use std::rc::Rc;
 use gstreamer::{glib, ClockTime};
-use gstreamer_pbutils::{
-    prelude::*, Discoverer, DiscovererContainerInfo, DiscovererInfo, DiscovererResult,
-    DiscovererStreamInfo,
-};
+use gstreamer_pbutils::{prelude::*, DiscovererResult};
+use gstreamer_play as gst_play;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 
@@ -300,9 +268,11 @@ impl Application for Jams {
                 menu::root(fl!("debug")),
                 menu::items(
                     &self.key_binds,
-                    vec![
-                        menu::Item::Button(fl!("debug-file-play"), None, MenuAction::DebugStub),
-                    ],
+                    vec![menu::Item::Button(
+                        fl!("debug"),
+                        None,
+                        MenuAction::DebugStub,
+                    )],
                 ),
             ),
         ]);
@@ -322,7 +292,7 @@ impl Application for Jams {
         let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
-        if (&self.scanned_files.len() > &0) {
+        if &self.scanned_files.len() > &0 {
             let mut file_col = Column::new().spacing(2);
 
             for file in &self.scanned_files {
@@ -335,12 +305,12 @@ impl Application for Jams {
                     .spacing(5)
                     .padding([6, 4, 6, 4]);
 
-                if (file.paused == true) {
+                if file.paused == true {
                     //let resume_txt = text("Resume");
                     let button = button::icon(icon::from_name("media-playback-start-symbolic"))
                         .on_press(Message::ResumeCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
-                } else if (file.playing == true) {
+                } else if file.playing == true {
                     //let playing_txt = text("Pause");
                     let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
                         .on_press(Message::PauseCurrentTrack);
@@ -557,7 +527,7 @@ impl Application for Jams {
                         / self.current_track_duration.as_secs() as f64
                         * 100.0) as u8;
 
-                    if (self.seek_position.as_millis() >= self.current_track_duration.as_millis()) {
+                    if self.seek_position.as_millis() >= self.current_track_duration.as_millis() {
                         println!("{}", String::from("End of track reached."));
                         self.global_play_state = PlayState::Idle;
 
@@ -627,7 +597,7 @@ impl Application for Jams {
 
                 match curr_index {
                     Some(index) => {
-                        if (index == 0) {
+                        if index == 0 {
                             self.scrub(0);
                         } else {
                             let prev_file = self.scanned_files.get(index - 1);
@@ -679,12 +649,11 @@ impl Application for Jams {
                 let timeout = 5 * gst::ClockTime::SECOND;
                 let discoverer = gstreamer_pbutils::Discoverer::new(timeout).unwrap();
 
-                for entry in WalkDir::new(url.to_file_path().unwrap()).into_iter().filter_map(|e| e.ok())
+                for entry in WalkDir::new(url.to_file_path().unwrap())
+                    .into_iter()
+                    .filter_map(|e| e.ok())
                 {
-                    let is_audio = match is_audio_file(entry.path()) {
-                        Ok(is) => is,
-                        Err(err) => false
-                    };
+                    let is_audio = is_audio_file(entry.path()).unwrap_or_else(|err| false);
                     if entry.file_type().is_file() && is_audio {
                         let saved_path = entry.clone().into_path();
                         match Url::from_file_path(entry.into_path().clone()) {
@@ -706,7 +675,9 @@ impl Application for Jams {
                                     Ok(info) => {
                                         match info.result() {
                                             DiscovererResult::Ok => println!("Discovered {url}"),
-                                            DiscovererResult::UriInvalid => println!("Invalid uri {url}"),
+                                            DiscovererResult::UriInvalid => {
+                                                println!("Invalid uri {url}")
+                                            }
                                             DiscovererResult::Error => {
                                                 println!("Error in DiscovererResult")
                                                 // if let Some(msg) = error {
@@ -822,7 +793,7 @@ impl Application for Jams {
                 self.global_play_state = PlayState::Paused;
 
                 for file in &mut self.scanned_files {
-                    if (file.playing == true) {
+                    if file.playing == true {
                         file.playing = false;
                         file.paused = true;
                     }
@@ -835,7 +806,7 @@ impl Application for Jams {
                 //self.audio_player.player.play();
                 self.global_play_state = PlayState::Playing;
                 for file in &mut self.scanned_files {
-                    if (file.paused == true) {
+                    if file.paused == true {
                         file.playing = true;
                         file.paused = false;
                     }
@@ -955,7 +926,7 @@ impl Jams {
 
         for file in &mut self.scanned_files {
             file.paused = false;
-            if (file.uri == uri) {
+            if file.uri == uri {
                 file.playing = true;
                 self.current_track_duration = file.duration;
             } else {
@@ -975,7 +946,7 @@ impl Jams {
 
     pub fn scrub(&mut self, value: u8) {
         self.scrub_value = value;
-        let percent: f64 = (f64::from(value) / 100.0);
+        let percent: f64 = f64::from(value) / 100.0;
         let pos = self.current_track_duration.as_secs() as f64 * percent;
         println!(
             "scrub {}, pos {}, percent {}",
@@ -984,7 +955,9 @@ impl Jams {
             percent
         );
         self.seek_position = Duration::from_secs(pos as u64);
-        self.alt_player.player.seek(ClockTime::from_seconds(pos as u64));
+        self.alt_player
+            .player
+            .seek(ClockTime::from_seconds(pos as u64));
     }
 }
 
@@ -997,10 +970,6 @@ fn is_audio_file(path: &Path) -> std::io::Result<bool> {
     Ok(info.is_audio(&buf))
 }
 
-
-
-// BEGIN GSTREAMER DISCOVERY STUFF
-
 fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
     if let Ok(s) = v.get::<&str>() {
         Some(s.to_string())
@@ -1010,149 +979,3 @@ fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
         None
     }
 }
-
-fn print_stream_info(info: &DiscovererStreamInfo, depth: usize) {
-    let caps_str = if let Some(caps) = info.caps() {
-        if caps.is_fixed() {
-            gstreamer_pbutils::pb_utils_get_codec_description(&caps)
-        } else {
-            glib::GString::from(caps.to_string())
-        }
-    } else {
-        glib::GString::from("")
-    };
-
-    let stream_nick = info.stream_type_nick();
-    println!(
-        "{stream_nick:>indent$}: {caps_str}",
-        stream_nick = stream_nick,
-        indent = 2 * depth + stream_nick.len(),
-        caps_str = caps_str
-    );
-
-    if let Some(tags) = info.tags() {
-        println!("{:indent$}Tags:", " ", indent = 2 * depth);
-        for (tag, values) in tags.iter_generic() {
-            let mut tags_str = format!(
-                "{tag:>indent$}: ",
-                tag = tag,
-                indent = 2 * (2 + depth) + tag.len()
-            );
-            let mut tag_num = 0;
-            for value in values {
-                if let Some(s) = send_value_as_str(value) {
-                    if tag_num > 0 {
-                        tags_str.push_str(", ")
-                    }
-                    tags_str.push_str(&s[..]);
-                    tag_num += 1;
-                }
-            }
-
-            println!("{tags_str}");
-        }
-    };
-}
-
-/* Print information regarding a stream and its substreams, if any */
-fn print_topology(info: &DiscovererStreamInfo, depth: usize) {
-    //print_stream_info(info, depth);
-
-    if let Some(next) = info.next() {
-        print_topology(&next, depth + 1);
-    } else if let Some(container_info) = info.downcast_ref::<DiscovererContainerInfo>() {
-        for stream in container_info.streams() {
-            print_topology(&stream, depth + 1);
-        }
-    }
-}
-
-fn on_discovered(
-    _discoverer: &Discoverer,
-    discoverer_info: &DiscovererInfo,
-    error: Option<&glib::Error>,
-) {
-    let uri = discoverer_info.uri();
-    match discoverer_info.result() {
-        DiscovererResult::Ok => println!("Discovered {uri}"),
-        DiscovererResult::UriInvalid => println!("Invalid uri {uri}"),
-        DiscovererResult::Error => {
-            if let Some(msg) = error {
-                println!("{msg}");
-            } else {
-                println!("Unknown error")
-            }
-        }
-        DiscovererResult::Timeout => println!("Timeout"),
-        DiscovererResult::Busy => println!("Busy"),
-        DiscovererResult::MissingPlugins => {
-            if let Some(s) = discoverer_info.misc() {
-                println!("{s}");
-            }
-        }
-        _ => println!("Unknown result"),
-    }
-
-    if discoverer_info.result() != DiscovererResult::Ok {
-        return;
-    }
-
-    println!("Duration: {}", discoverer_info.duration().display());
-
-    // if let Some(tags) = discoverer_info.tags() {
-    //     println!("Tags:");
-    //     for (tag, values) in tags.iter_generic() {
-    //         print!("  {tag}: ");
-    //         values.for_each(|v| {
-    //             if let Some(s) = send_value_as_str(v) {
-    //                 println!("{s}")
-    //             }
-    //         })
-    //     }
-    // }
-    //
-    // println!(
-    //     "Seekable: {}",
-    //     if discoverer_info.is_seekable() {
-    //         "yes"
-    //     } else {
-    //         "no"
-    //     }
-    // );
-    //
-    // println!("Stream information:");
-
-    if let Some(stream_info) = discoverer_info.stream_info() {
-        print_topology(&stream_info, 1);
-    }
-}
-
-fn run_discoverer(uri: &str) -> Result<(), anyhow::Error> {
-    // let args: Vec<_> = env::args().collect();
-    // let uri: &str = if args.len() == 2 {
-    //     args[1].as_ref()
-    // } else {
-    //     "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"
-    // };
-
-    println!("Discovering {uri}");
-
-    let loop_ = glib::MainLoop::new(None, false);
-    let timeout = 5 * gst::ClockTime::SECOND;
-    let discoverer = gstreamer_pbutils::Discoverer::new(timeout)?;
-    discoverer.connect_discovered(on_discovered);
-    let loop_clone = loop_.clone();
-    discoverer.connect_finished(move |_| {
-        println!("\nFinished discovering");
-        loop_clone.quit();
-    });
-    discoverer.start();
-    discoverer.discover_uri_async(uri)?;
-
-    loop_.run();
-
-    discoverer.stop();
-
-    Ok(())
-}
-
