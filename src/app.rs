@@ -82,11 +82,6 @@ pub struct MusicFile {
     date: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct GSTWrapper {
-    pipeline: gst::Pipeline,
-}
-
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
 /// This is used to communicate between the different parts of your application.
 /// If your application does not need to send messages, you can use an empty enum or `()`.
