@@ -1482,7 +1482,6 @@ impl Jams {
     }
 
     pub fn switch_track(&mut self, uri: String) {
-        // self.audio_player.player.stop();
         self.alt_player.player.stop();
 
         for file in &mut self.scanned_files {
@@ -1496,35 +1495,6 @@ impl Jams {
         }
 
         self.alt_player.player.set_uri(Some(uri.as_str()));
-
-        // let temp_duration = mp3_duration::from_path(&file_path).unwrap();
-        // println!("File duration: {:?}", temp_duration);
-
-        //let file = BufReader::new(File::open(&file_path).unwrap());
-
-        //let source = Decoder::new(file).unwrap();
-
-        //println!("{:?}", source.total_duration());
-
-        // self.current_track_duration = match source.total_duration() {
-        //     None => mp3_duration::from_path(&file_path).unwrap(),
-        //     Some(duration) => duration,
-        // };
-
-        // Turns out I just had wrap this guy in a struct,
-        // I think because the stream needs to stay alive or audio won't play.
-        // (_stream is a field in this struct)
-        // (tested without the _stream field and audio didn't work jsyk)
-        // Sleep until end is completely unnecessary in this case because
-        // libcosmic keeps the main thread alive.
-        // And I don't have to make a second thread because
-        // rodio is already doing that in the background
-        // holy smokes
-        //self.audio_player.player.append(source);
-        // When you append a source to the player it immediately starts playing
-        // but if you pause and append another thing it don't start playing again
-        // therefore, we make sure to call play every time.
-        //self.audio_player.player.play();
 
         self.alt_player.player.play();
 
@@ -1545,10 +1515,7 @@ impl Jams {
             percent
         );
         self.seek_position = Duration::from_secs(pos as u64);
-        self.audio_player
-            .player
-            .try_seek(self.seek_position)
-            .unwrap();
+        self.alt_player.player.seek(ClockTime::from_seconds(pos as u64));
     }
 }
 
