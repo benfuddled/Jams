@@ -765,59 +765,59 @@ impl Application for Jams {
                         / self.current_track_duration.as_secs() as f64
                         * 100.0) as u8;
 
-                    // if (self.seek_position.as_millis() >= self.current_track_duration.as_millis()) {
-                    //     println!("{}", String::from("End of track reached."));
-                    //     self.global_play_state = PlayState::Idle;
-                    //
-                    //     // let next_track = self.scanned_files
-                    //     //     .iter()
-                    //     //     .filter(|x| x.playing == true).next();
-                    //
-                    //     // let next_track = self.scanned_files
-                    //     //     .iter()
-                    //     //     .filter(|x| x.playing == true).cloned().next();
-                    //     //
-                    //     //
-                    //     //     // .next();
-                    //     //
-                    //     // for file in self.scanned_files.iter_mut() {
-                    //     //     if (file.playing == true) {
-                    //     //         file.playing = false;
-                    //     //     }
-                    //     // }
-                    //
-                    //     // let next_index = self.scanned_files
-                    //     //     .iter()
-                    //     //     .position(|x| x.playing == true) + 1;
-                    //
-                    //     let next_index = self
-                    //         .scanned_files
-                    //         .iter()
-                    //         .position(|x| x.playing == true)
-                    //         .unwrap()
-                    //         + 1;
-                    //
-                    //     let next_file = self.scanned_files.get(next_index);
-                    //
-                    //     match next_file {
-                    //         Some(track) => {
-                    //             println!("Moving to next track: {}", track.track_title);
-                    //             self.seek_position = Duration::new(0, 0);
-                    //             self.audio_player.player.stop();
-                    //             self.global_play_state = PlayState::Idle;
-                    //             self.current_track_duration = Duration::new(0, 0);
-                    //             self.switch_track(track.saved_path.clone());
-                    //         }
-                    //         None => {
-                    //             println!("End of list reached. Stopping playback.");
-                    //             self.seek_position = Duration::new(0, 0);
-                    //             self.audio_player.player.stop();
-                    //             self.global_play_state = PlayState::Idle;
-                    //             self.current_track_duration = Duration::new(0, 0);
-                    //         }
-                    //     }
-                    //     //Message::StartPlayingNewTrack();
-                    // }
+                    if (self.seek_position.as_millis() >= self.current_track_duration.as_millis()) {
+                        println!("{}", String::from("End of track reached."));
+                        self.global_play_state = PlayState::Idle;
+
+                        // let next_track = self.scanned_files
+                        //     .iter()
+                        //     .filter(|x| x.playing == true).next();
+
+                        // let next_track = self.scanned_files
+                        //     .iter()
+                        //     .filter(|x| x.playing == true).cloned().next();
+                        //
+                        //
+                        //     // .next();
+                        //
+                        // for file in self.scanned_files.iter_mut() {
+                        //     if (file.playing == true) {
+                        //         file.playing = false;
+                        //     }
+                        // }
+
+                        // let next_index = self.scanned_files
+                        //     .iter()
+                        //     .position(|x| x.playing == true) + 1;
+
+                        let next_index = self
+                            .scanned_files
+                            .iter()
+                            .position(|x| x.playing == true)
+                            .unwrap()
+                            + 1;
+
+                        let next_file = self.scanned_files.get(next_index);
+
+                        match next_file {
+                            Some(track) => {
+                                println!("Moving to next track: {}", track.track_title);
+                                self.seek_position = Duration::new(0, 0);
+                                self.audio_player.player.stop();
+                                self.global_play_state = PlayState::Idle;
+                                self.current_track_duration = Duration::new(0, 0);
+                                self.switch_track(track.uri.clone());
+                            }
+                            None => {
+                                println!("End of list reached. Stopping playback.");
+                                self.seek_position = Duration::new(0, 0);
+                                self.audio_player.player.stop();
+                                self.global_play_state = PlayState::Idle;
+                                self.current_track_duration = Duration::new(0, 0);
+                            }
+                        }
+                        //Message::StartPlayingNewTrack();
+                    }
                 }
             }
             Message::SkipNext => {
