@@ -13,7 +13,7 @@ mod icon_cache;
 /// - `()` is the flags that your app needs to use before it starts.
 ///  If your app does not need any flags, you can pass in `()`.
 fn main() -> cosmic::iced::Result {
-    // For any error, return an exit code -1. Otherwise return the exit code provided.
+    // For any error, return an exit code -1. Otherwise, return the exit code provided.
     let settings = cosmic::app::Settings::default();
     cosmic::app::run::<Jams>(settings, ())
 }

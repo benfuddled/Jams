@@ -7,7 +7,6 @@ use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
 use cosmic::widget::{self, button, icon, menu, nav_bar, slider, text, Column, Container, Row};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use std::fs::File;
@@ -26,7 +25,7 @@ use walkdir::WalkDir;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::{glib, ClockTime};
-use gstreamer_pbutils::{prelude::*, DiscovererResult};
+use gstreamer_pbutils::DiscovererResult;
 use gstreamer_play as gst_play;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
@@ -296,10 +295,6 @@ impl Application for Jams {
             let mut file_col = Column::new().spacing(2);
 
             for file in &self.scanned_files {
-                //println!("Name: {}", file.saved_path.display());
-
-                //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
-
                 let mut file_txt_row = Row::new()
                     .align_y(Alignment::Center)
                     .spacing(5)
@@ -643,9 +638,6 @@ impl Application for Jams {
                 });
             }
             Message::AddSongsToLibrary(url) => {
-                let paths = fs::read_dir(url.to_file_path().unwrap()).unwrap();
-
-                let loop_ = glib::MainLoop::new(None, false);
                 let timeout = 5 * gst::ClockTime::SECOND;
                 let discoverer = gstreamer_pbutils::Discoverer::new(timeout).unwrap();
 
