@@ -2412,6 +2412,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "gstreamer-play"
+version = "0.23.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ef455584b832e9fdc76f7952b9432eaee2fd287157b03cf2bc0e83f1b41619c"
+dependencies = [
+ "glib",
+ "gstreamer",
+ "gstreamer-play-sys",
+ "gstreamer-video",
+ "libc",
+]
+
+[[package]]
+name = "gstreamer-play-sys"
+version = "0.23.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b01c1c4f09cb6709c7da2532b3fcbc14da9006d508baee606328080e46f491f5"
+dependencies = [
+ "glib-sys",
+ "gobject-sys",
+ "gstreamer-sys",
+ "gstreamer-video-sys",
+ "libc",
+ "system-deps",
+]
+
+[[package]]
 name = "gstreamer-player"
 version = "0.23.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3212,6 +3239,7 @@ dependencies = [
  "cpal 0.13.5",
  "gstreamer",
  "gstreamer-pbutils",
+ "gstreamer-play",
  "gstreamer-player",
  "i18n-embed",
  "i18n-embed-fl",

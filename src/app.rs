@@ -25,6 +25,8 @@ use std::num::ParseIntError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use anyhow;
+
 use infer::Infer;
 
 // use cosmic_files::{
@@ -48,6 +50,8 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_player as gst_player;
 use gstreamer_player::PlayerVideoRenderer;
+
+use gstreamer_play as gst_play;
 
 use std::env;
 use std::rc::Rc;
@@ -105,7 +109,7 @@ pub struct RodioAudioPlayer {
 
 pub struct GStreamerPlayer {
     /// The sink responsible for managing the audio playback.
-    player: gst_player::Player,
+    player: gst_play::Play,
     /// Store content for rewind/replay
     content: Vec<u8>,
 }
@@ -122,6 +126,11 @@ pub struct MusicFile {
     album: String,
     album_artist: String,
     date: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct GSTWrapper {
+    pipeline: gst::Pipeline,
 }
 
 // #[derive(Default)]
@@ -147,7 +156,7 @@ pub enum Message {
     FileRead(Url, String),
     OpenError(Arc<file_chooser::Error>),
     OpenFile,
-    OpenGSTFile,
+    GSTPlayDebug,
     Selected(Url),
     SelectedGST(Url),
     AddFolder,
@@ -198,7 +207,7 @@ pub enum MenuAction {
     About,
     DebugScan,
     OpenFile,
-    OpenGSTFile
+    GSTPlayDebug
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -209,7 +218,7 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
             MenuAction::DebugScan => Message::DebugScan,
             MenuAction::OpenFile => Message::OpenFile,
-            MenuAction::OpenGSTFile => Message::OpenGSTFile,
+            MenuAction::GSTPlayDebug => Message::GSTPlayDebug,
         }
     }
 }
@@ -290,14 +299,21 @@ impl Application for Jams {
         };
 
         gst::init().expect("Could not initialize GStreamer.");
-        let dispatcher = gst_player::PlayerGMainContextSignalDispatcher::new(None);
-        let g_play = gst_player::Player::new(None::<PlayerVideoRenderer>, Some(dispatcher.upcast::<gst_player::PlayerSignalDispatcher>()),);
-        let g_content = Vec::new();
+
+        let play = gst_play::Play::new(None::<gst_play::PlayVideoRenderer>);
+        let gst_content = Vec::new();
 
         let mut alt_player = GStreamerPlayer {
-            player: g_play,
-            content: g_content,
+            player: play,
+            content: gst_content,
         };
+
+        // let mut gst_wrapper = GSTWrapper {
+        //     audio_convert: converter,
+        //     auto_audio_sink: sink,
+        //     audio_resampler: resampler,
+        //     pipeline: pipeline,
+        // };
 
         let mut global_play_state: PlayState = PlayState::default();
 
@@ -339,7 +355,7 @@ impl Application for Jams {
                     vec![
                         menu::Item::Button(fl!("debug-file-listing"), None, MenuAction::DebugScan),
                         menu::Item::Button(fl!("debug-file-play"), None, MenuAction::OpenFile),
-                        menu::Item::Button(fl!("debug-gstreamer-file"), None, MenuAction::OpenGSTFile),
+                        menu::Item::Button(fl!("debug-gstreamer-file"), None, MenuAction::GSTPlayDebug),
                     ],
                 ),
             ),
@@ -585,30 +601,162 @@ impl Application for Jams {
     /// background thread managed by the application's executor.
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
-            Message::OpenGSTFile => {
-                return cosmic::task::future(async move {
-                    eprintln!("opening new dialog");
+            Message::GSTPlayDebug => {
+                //     https://gstreamer.freedesktop.org/documentation/tutorials/basic/hello-world.html?gi-language=c
+                //     https://gitlab.freedesktop.org/gstreamer/gstreamer-rs/-/blob/main/tutorials/src/bin/basic-tutorial-3.rs
+                //gst::init().expect("Could not initialize GStreamer.");
 
-                    #[cfg(feature = "rfd")]
-                    let filter = FileFilter::new("Music files").extension("mp3");
 
-                    #[cfg(feature = "xdg-portal")]
-                    let filter = FileFilter::new("Music files").glob("*.mp3");
+                //let uri = "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm";
+                //let uri = "file:///home/ben/MEGA/Music/HQ/Gustavo Santaolalla/The Last of Us Original Score/17 Infected.mp3";
+                //let uri = "file:///home/ben/MEGA/Music/HQ/Deejay Verstyle/Parappa The Rapper Remix Album/Deejay Verstyle - Parappa The Rapper Remix Album - 04 Prince Fleaswallow (Remix).flac";
+                //let uri = "file:///home/ben/MEGA/Music/HQ/MASTER BOOT RECORD/WAREZ/MASTER BOOT RECORD - DOOM [3HSpWQH4iRs].opus";
+                //let uri = "file:///home/ben/MEGA/Music/Unsorted/Alexisonfire/Crisis/02 This Could Be Anywhere in the World.m4a";
+                let uri = "file:///home/ben/MEGA/Music/Unsorted/Pokémon Reorchestrated/Kanto Symphony (MP3)/04 Pallet Town.mp3";
 
-                    let dialog = file_chooser::open::Dialog::new()
-                        // Sets title of the dialog window.
-                        .title("Choose a file")
-                        // Accept only plain text files
-                        .filter(filter);
+                // let playbin = gst::ElementFactory::make("playbin")
+                //     .property("uri", uri)
+                //     .build()
+                //     .unwrap();
+                //
+                // let bus = playbin.bus().unwrap();
+                //
+                // playbin
+                //     .set_state(gst::State::Playing)
+                //     .expect("Unable to set the pipeline to the `Playing` state");
+                //
+                // println!("{:?}", playbin.current_clock_time());
 
-                    match dialog.open_file().await {
-                        Ok(response) => Message::SelectedGST(response.url().to_owned()),
+                //let play = gst_play::Play::new(None::<gst_play::PlayVideoRenderer>);
+                self.alt_player.player.set_uri(Some(uri));
+                self.alt_player.player.play();
 
-                        Err(file_chooser::Error::Cancelled) => Message::Cancelled,
+                // Set the message bus to flushing to ensure that all pending messages are dropped and there
+                // are no further references to the play instance.
+                //play.message_bus().set_flushing(true);
+                self.global_play_state = PlayState::Playing;
+                println!("done lol");
 
-                        Err(why) => Message::OpenError(Arc::new(why)),
-                    }
-                });
+                // let dispatcher = gst_player::PlayerGMainContextSignalDispatcher::new(None);
+                // let player = gst_player::Player::new(
+                //     None::<gst_player::PlayerVideoRenderer>,
+                //     Some(dispatcher.upcast::<gst_player::PlayerSignalDispatcher>()),
+                // );
+
+                // Tell the player what uri to play.
+                // player.set_uri(Some(uri));
+                //
+                // player.play();
+
+                // Create the elements
+                // We create the elements as usual. uridecodebin will internally instantiate all the necessary
+                // elements (sources, demuxers and decoders) to turn a URI into raw audio and/or video streams.
+                // It does half the work that playbin does. Since it contains demuxers, its source pads are not
+                // initially available and we will need to link to them on the fly.
+                // let source = gst::ElementFactory::make("playbin")
+                //     .name("source")
+                //     // Set the URI to play
+                //     .property("uri", uri)
+                //     .build()
+                //     .expect("Could not create uridecodebin element.");
+                // The autoaudiosink is the equivalent of autovideosink seen in the previous tutorial, for
+                // audio. It will render the audio stream to the audio card.
+                // let sink = gst::ElementFactory::make("autoaudiosink")
+                //     .name("sink")
+                //     .build()
+                //     .expect("Could not create sink element");
+
+
+                // Create the empty pipeline
+                //let pipeline = gst::Pipeline::with_name("test-pipeline");
+
+                // pipeline.add_many(&[&source, &sink]).unwrap();
+                // source.link(&sink).expect("Elements could not be linked.");
+
+                // Build the pipeline Note that we are NOT linking the source at this point.
+                // pipeline
+                //     .add_many([&source, &sink])
+                //     .unwrap();
+                // Here we link the elements converter, resample and sink, but we DO NOT link them with the
+                // source, since at this point it contains no source pads. We just leave this branch
+                // (converter + sink) unlinked, until later on.
+                //gst::Element::link_many([&convert, &resample, &sink]).expect("Elements could not be linked.");
+
+                // Connect the pad-added signal
+                // GSignals are a crucial point in GStreamer. They allow you to be notified (by means of a
+                // callback) when something interesting has happened. Signals are identified by a name, and
+                // each GObject has its own signals.
+                // This comment is for the C API so expect some inaccuracies. The callback is now a closure?
+                // source.connect_pad_added(move |src, src_pad| {
+                //     println!("Received new pad {} from {}", src_pad.name(), src.name());
+                //
+                //     src.downcast_ref::<gst::Bin>()
+                //         .unwrap()
+                //         .debug_to_dot_file_with_ts(gst::DebugGraphDetails::all(), "pad-added");
+                //
+                //     let sink_pad = convert
+                //         .static_pad("sink")
+                //         .expect("Failed to get static sink pad from convert");
+                //     if sink_pad.is_linked() {
+                //         println!("We are already linked. Ignoring.");
+                //         return;
+                //     }
+                //
+                //     let new_pad_caps = src_pad
+                //         .current_caps()
+                //         .expect("Failed to get caps of new pad.");
+                //     let new_pad_struct = new_pad_caps
+                //         .structure(0)
+                //         .expect("Failed to get first structure of caps.");
+                //     let new_pad_type = new_pad_struct.name();
+                //
+                //     let is_audio = new_pad_type.starts_with("audio/x-raw");
+                //     if !is_audio {
+                //         println!("It has type {new_pad_type} which is not raw audio. Ignoring.");
+                //         return;
+                //     }
+                //
+                //     let res = src_pad.link(&sink_pad);
+                //     if res.is_err() {
+                //         println!("Type is {new_pad_type} but link failed.");
+                //     } else {
+                //         println!("Link succeeded (type {new_pad_type}).");
+                //     }
+                // });
+
+                // Start playing
+                // pipeline
+                //     .set_state(gst::State::Playing)
+                //     .expect("Unable to set the pipeline to the `Playing` state");
+                //
+                // // Wait until error or EOS
+                // let bus = pipeline.bus().unwrap();
+
+
+
+                // return cosmic::task::future(async move {
+                //     eprintln!("opening new dialog");
+                //
+                //     #[cfg(feature = "rfd")]
+                //     let filter = FileFilter::new("Music files").extension("mp3");
+                //
+                //     #[cfg(feature = "xdg-portal")]
+                //     let filter = FileFilter::new("Music files").glob("*.mp3");
+                //
+                //     let dialog = file_chooser::open::Dialog::new()
+                //         // Sets title of the dialog window.
+                //         .title("Choose a file")
+                //         // Accept only plain text files
+                //         .filter(filter);
+                //
+                //     match dialog.open_file().await {
+                //         Ok(response) => Message::SelectedGST(response.url().to_owned()),
+                //
+                //         Err(file_chooser::Error::Cancelled) => Message::Cancelled,
+                //
+                //         Err(why) => Message::OpenError(Arc::new(why)),
+                //     }
+                // });
             }
             Message::WatchTick(now) => {
                 if let PlayState::Playing = &mut self.global_play_state {
@@ -620,59 +768,59 @@ impl Application for Jams {
                         / self.current_track_duration.as_secs() as f64
                         * 100.0) as u8;
 
-                    if (self.seek_position.as_millis() >= self.current_track_duration.as_millis()) {
-                        println!("{}", String::from("End of track reached."));
-                        self.global_play_state = PlayState::Idle;
-
-                        // let next_track = self.scanned_files
-                        //     .iter()
-                        //     .filter(|x| x.playing == true).next();
-
-                        // let next_track = self.scanned_files
-                        //     .iter()
-                        //     .filter(|x| x.playing == true).cloned().next();
-                        //
-                        //
-                        //     // .next();
-                        //
-                        // for file in self.scanned_files.iter_mut() {
-                        //     if (file.playing == true) {
-                        //         file.playing = false;
-                        //     }
-                        // }
-
-                        // let next_index = self.scanned_files
-                        //     .iter()
-                        //     .position(|x| x.playing == true) + 1;
-
-                        let next_index = self
-                            .scanned_files
-                            .iter()
-                            .position(|x| x.playing == true)
-                            .unwrap()
-                            + 1;
-
-                        let next_file = self.scanned_files.get(next_index);
-
-                        match next_file {
-                            Some(track) => {
-                                println!("Moving to next track: {}", track.track_title);
-                                self.seek_position = Duration::new(0, 0);
-                                self.audio_player.player.stop();
-                                self.global_play_state = PlayState::Idle;
-                                self.current_track_duration = Duration::new(0, 0);
-                                self.switch_track(track.saved_path.clone());
-                            }
-                            None => {
-                                println!("End of list reached. Stopping playback.");
-                                self.seek_position = Duration::new(0, 0);
-                                self.audio_player.player.stop();
-                                self.global_play_state = PlayState::Idle;
-                                self.current_track_duration = Duration::new(0, 0);
-                            }
-                        }
-                        //Message::StartPlayingNewTrack();
-                    }
+                    // if (self.seek_position.as_millis() >= self.current_track_duration.as_millis()) {
+                    //     println!("{}", String::from("End of track reached."));
+                    //     self.global_play_state = PlayState::Idle;
+                    //
+                    //     // let next_track = self.scanned_files
+                    //     //     .iter()
+                    //     //     .filter(|x| x.playing == true).next();
+                    //
+                    //     // let next_track = self.scanned_files
+                    //     //     .iter()
+                    //     //     .filter(|x| x.playing == true).cloned().next();
+                    //     //
+                    //     //
+                    //     //     // .next();
+                    //     //
+                    //     // for file in self.scanned_files.iter_mut() {
+                    //     //     if (file.playing == true) {
+                    //     //         file.playing = false;
+                    //     //     }
+                    //     // }
+                    //
+                    //     // let next_index = self.scanned_files
+                    //     //     .iter()
+                    //     //     .position(|x| x.playing == true) + 1;
+                    //
+                    //     let next_index = self
+                    //         .scanned_files
+                    //         .iter()
+                    //         .position(|x| x.playing == true)
+                    //         .unwrap()
+                    //         + 1;
+                    //
+                    //     let next_file = self.scanned_files.get(next_index);
+                    //
+                    //     match next_file {
+                    //         Some(track) => {
+                    //             println!("Moving to next track: {}", track.track_title);
+                    //             self.seek_position = Duration::new(0, 0);
+                    //             self.audio_player.player.stop();
+                    //             self.global_play_state = PlayState::Idle;
+                    //             self.current_track_duration = Duration::new(0, 0);
+                    //             self.switch_track(track.saved_path.clone());
+                    //         }
+                    //         None => {
+                    //             println!("End of list reached. Stopping playback.");
+                    //             self.seek_position = Duration::new(0, 0);
+                    //             self.audio_player.player.stop();
+                    //             self.global_play_state = PlayState::Idle;
+                    //             self.current_track_duration = Duration::new(0, 0);
+                    //         }
+                    //     }
+                    //     //Message::StartPlayingNewTrack();
+                    // }
                 }
             }
             Message::SkipNext => {
@@ -1105,7 +1253,7 @@ impl Application for Jams {
                                             }
                                         }
 
-                                        let mut music_file = MusicFile {
+                                        let music_file = MusicFile {
                                             saved_path: saved_path.clone(),
                                             //metadata,
                                             track_title,
