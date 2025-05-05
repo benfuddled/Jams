@@ -55,7 +55,7 @@ use gstreamer_play as gst_play;
 
 use std::env;
 use std::rc::Rc;
-use gstreamer::glib;
+use gstreamer::{glib, ClockTime};
 use gstreamer_pbutils::{
     prelude::*, Discoverer, DiscovererContainerInfo, DiscovererInfo, DiscovererResult,
     DiscovererStreamInfo,
@@ -123,6 +123,7 @@ pub struct MusicFile {
     paused: bool,
     track_title: String,
     track_number: u16,
+    duration: Duration,
     artist: String,
     album: String,
     album_artist: String,
@@ -1027,6 +1028,7 @@ impl Application for Jams {
                                     saved_path,
                                     uri: String::from(""),
                                     //metadata,
+                                    duration: Duration::default(),
                                     track_title,
                                     track_number,
                                     artist,
@@ -1121,6 +1123,7 @@ impl Application for Jams {
                                     saved_path,
                                     uri: String::from(""),
                                     //metadata,
+                                    duration: Duration::default(),
                                     track_title,
                                     track_number,
                                     artist,
@@ -1168,6 +1171,7 @@ impl Application for Jams {
                                 let mut album_artist = String::from("");
                                 let mut date = String::from("");
                                 let mut track_number = 0;
+                                let mut duration = Duration::default();
 
                                 match discoverer.discover_uri(url.as_str()) {
                                     Err(err) => {
@@ -1196,6 +1200,12 @@ impl Application for Jams {
                                         }
 
                                         if info.result() == DiscovererResult::Ok {
+                                            match info.duration() {
+                                                None => {}
+                                                Some(time) => {
+                                                    duration = Duration::from(time);
+                                                }
+                                            };
                                             if let Some(tags) = info.tags() {
                                                 println!("Tags:");
                                                 for (tag, values) in tags.iter_generic() {
@@ -1260,6 +1270,7 @@ impl Application for Jams {
                                             artist,
                                             album,
                                             album_artist,
+                                            duration,
                                             playing: false,
                                             paused: false,
                                             date,
@@ -1478,16 +1489,13 @@ impl Jams {
             file.paused = false;
             if (file.uri == uri) {
                 file.playing = true;
+                self.current_track_duration = file.duration;
             } else {
                 file.playing = false;
             }
         }
 
         self.alt_player.player.set_uri(Some(uri.as_str()));
-
-        // self
-        //     .alt_player
-        //     .set_uri(Some(&format!("file:///{}", file_path.to_str().to_str()))).expect("TODO: panic message");
 
         // let temp_duration = mp3_duration::from_path(&file_path).unwrap();
         // println!("File duration: {:?}", temp_duration);
