@@ -117,6 +117,7 @@ pub struct GStreamerPlayer {
 #[derive(Clone, Debug)]
 pub struct MusicFile {
     saved_path: PathBuf,
+    uri: String,
     //metadata: MetadataRevision,
     playing: bool,
     paused: bool,
@@ -162,7 +163,7 @@ pub enum Message {
     AddFolder,
     AddSongsToLibrary(Url),
     AddSongsToLibraryGST(Url),
-    StartPlayingNewTrack(PathBuf),
+    StartPlayingNewTrack(String),
     PauseCurrentTrack,
     ResumeCurrentTrack,
     WatchTick(Instant),
@@ -308,13 +309,6 @@ impl Application for Jams {
             content: gst_content,
         };
 
-        // let mut gst_wrapper = GSTWrapper {
-        //     audio_convert: converter,
-        //     auto_audio_sink: sink,
-        //     audio_resampler: resampler,
-        //     pipeline: pipeline,
-        // };
-
         let mut global_play_state: PlayState = PlayState::default();
 
         let mut app = Jams {
@@ -402,7 +396,7 @@ impl Application for Jams {
                 } else {
                     //let paused_txt = text("Play");
                     let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
+                        .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
                     file_txt_row = file_txt_row.push(button);
                 }
 
@@ -628,6 +622,8 @@ impl Application for Jams {
                 // println!("{:?}", playbin.current_clock_time());
 
                 //let play = gst_play::Play::new(None::<gst_play::PlayVideoRenderer>);
+                // https://gitlab.freedesktop.org/gstreamer/gstreamer-rs/-/blob/main/examples/src/bin/play.rs
+                // https://gstreamer.freedesktop.org/documentation/rust/stable/latest/docs/gstreamer_player/
                 self.alt_player.player.set_uri(Some(uri));
                 self.alt_player.player.play();
 
@@ -840,7 +836,7 @@ impl Application for Jams {
                         self.audio_player.player.stop();
                         self.global_play_state = PlayState::Idle;
                         self.current_track_duration = Duration::new(0, 0);
-                        self.switch_track(track.saved_path.clone());
+                        self.switch_track(track.uri.clone());
                     }
                     None => {
                         println!("End of list reached. Stopping playback.");
@@ -871,7 +867,7 @@ impl Application for Jams {
                                     self.audio_player.player.stop();
                                     self.global_play_state = PlayState::Idle;
                                     self.current_track_duration = Duration::new(0, 0);
-                                    self.switch_track(track.saved_path.clone());
+                                    self.switch_track(track.uri.clone());
                                 }
                                 None => {
                                     println!("End of list reached. Stopping playback.");
@@ -1029,6 +1025,7 @@ impl Application for Jams {
 
                                 let mut music_file = MusicFile {
                                     saved_path,
+                                    uri: String::from(""),
                                     //metadata,
                                     track_title,
                                     track_number,
@@ -1122,6 +1119,7 @@ impl Application for Jams {
 
                                 let mut music_file = MusicFile {
                                     saved_path,
+                                    uri: String::from(""),
                                     //metadata,
                                     track_title,
                                     track_number,
@@ -1255,6 +1253,7 @@ impl Application for Jams {
 
                                         let music_file = MusicFile {
                                             saved_path: saved_path.clone(),
+                                            uri: url.to_string(),
                                             //metadata,
                                             track_title,
                                             track_number,
@@ -1276,8 +1275,8 @@ impl Application for Jams {
                 }
             }
 
-            Message::StartPlayingNewTrack(file_path) => {
-                self.switch_track(file_path);
+            Message::StartPlayingNewTrack(uri) => {
+                self.switch_track(uri);
             }
 
             Message::PauseCurrentTrack => {
@@ -1471,17 +1470,20 @@ impl Jams {
         self.set_window_title(window_title)
     }
 
-    pub fn switch_track(&mut self, file_path: PathBuf) {
-        self.audio_player.player.stop();
+    pub fn switch_track(&mut self, uri: String) {
+        // self.audio_player.player.stop();
+        self.alt_player.player.stop();
 
         for file in &mut self.scanned_files {
             file.paused = false;
-            if (file.saved_path == file_path) {
+            if (file.uri == uri) {
                 file.playing = true;
             } else {
                 file.playing = false;
             }
         }
+
+        self.alt_player.player.set_uri(Some(uri.as_str()));
 
         // self
         //     .alt_player
@@ -1490,18 +1492,16 @@ impl Jams {
         // let temp_duration = mp3_duration::from_path(&file_path).unwrap();
         // println!("File duration: {:?}", temp_duration);
 
-        let file = BufReader::new(File::open(&file_path).unwrap());
+        //let file = BufReader::new(File::open(&file_path).unwrap());
 
-        let source = Decoder::new(file).unwrap();
+        //let source = Decoder::new(file).unwrap();
 
-        println!("{:?}", source.total_duration());
+        //println!("{:?}", source.total_duration());
 
-        self.current_track_duration = match source.total_duration() {
-            None => mp3_duration::from_path(&file_path).unwrap(),
-            Some(duration) => duration,
-        };
-
-        // self.current_track_duration = source.total_duration().unwrap();
+        // self.current_track_duration = match source.total_duration() {
+        //     None => mp3_duration::from_path(&file_path).unwrap(),
+        //     Some(duration) => duration,
+        // };
 
         // Turns out I just had wrap this guy in a struct,
         // I think because the stream needs to stay alive or audio won't play.
@@ -1512,11 +1512,13 @@ impl Jams {
         // And I don't have to make a second thread because
         // rodio is already doing that in the background
         // holy smokes
-        self.audio_player.player.append(source);
+        //self.audio_player.player.append(source);
         // When you append a source to the player it immediately starts playing
         // but if you pause and append another thing it don't start playing again
         // therefore, we make sure to call play every time.
-        self.audio_player.player.play();
+        //self.audio_player.player.play();
+
+        self.alt_player.player.play();
 
         self.last_tick = Instant::now();
         self.seek_position = Duration::default();
