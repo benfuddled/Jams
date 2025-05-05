@@ -53,7 +53,7 @@ pub struct Jams {
     nav: nav_bar::Model,
     /// A vector that contains the list of scanned files
     scanned_files: Vec<MusicFile>,
-    alt_player: GStreamerPlayer,
+    audio_player: GStreamerPlayer,
     global_play_state: PlayState,
     current_track_duration: Duration,
     seek_position: Duration,
@@ -228,7 +228,7 @@ impl Application for Jams {
         let play = gst_play::Play::new(None::<gst_play::PlayVideoRenderer>);
         let gst_content = Vec::new();
 
-        let mut alt_player = GStreamerPlayer {
+        let mut audio_player = GStreamerPlayer {
             player: play,
             content: gst_content,
         };
@@ -241,7 +241,7 @@ impl Application for Jams {
             key_binds: HashMap::new(),
             nav,
             scanned_files,
-            alt_player,
+            audio_player,
             global_play_state,
             scrub_value: 50,
             current_track_duration: Duration::default(),
@@ -544,7 +544,7 @@ impl Application for Jams {
                             Some(track) => {
                                 println!("Moving to next track: {}", track.track_title);
                                 self.seek_position = Duration::new(0, 0);
-                                self.alt_player.player.stop();
+                                self.audio_player.player.stop();
                                 self.global_play_state = PlayState::Idle;
                                 self.current_track_duration = Duration::new(0, 0);
                                 self.switch_track(track.uri.clone());
@@ -552,7 +552,7 @@ impl Application for Jams {
                             None => {
                                 println!("End of list reached. Stopping playback.");
                                 self.seek_position = Duration::new(0, 0);
-                                self.alt_player.player.stop();
+                                self.audio_player.player.stop();
                                 self.global_play_state = PlayState::Idle;
                                 self.current_track_duration = Duration::new(0, 0);
                             }
@@ -575,7 +575,7 @@ impl Application for Jams {
                     Some(track) => {
                         println!("Moving to next track: {}", track.track_title);
                         self.seek_position = Duration::new(0, 0);
-                        self.alt_player.player.stop();
+                        self.audio_player.player.stop();
                         self.global_play_state = PlayState::Idle;
                         self.current_track_duration = Duration::new(0, 0);
                         self.switch_track(track.uri.clone());
@@ -583,7 +583,7 @@ impl Application for Jams {
                     None => {
                         println!("End of list reached. Stopping playback.");
                         self.seek_position = Duration::new(0, 0);
-                        self.alt_player.player.stop();
+                        self.audio_player.player.stop();
                         self.global_play_state = PlayState::Idle;
                         self.current_track_duration = Duration::new(0, 0);
                     }
@@ -613,7 +613,7 @@ impl Application for Jams {
                                 None => {
                                     println!("End of list reached. Stopping playback.");
                                     self.seek_position = Duration::new(0, 0);
-                                    self.alt_player.player.stop();
+                                    self.audio_player.player.stop();
                                     self.global_play_state = PlayState::Idle;
                                     self.current_track_duration = Duration::new(0, 0);
                                 }
@@ -788,7 +788,7 @@ impl Application for Jams {
             }
 
             Message::PauseCurrentTrack => {
-                self.alt_player.player.pause();
+                self.audio_player.player.pause();
                 //self.audio_player.player.pause();
                 self.global_play_state = PlayState::Paused;
 
@@ -802,7 +802,7 @@ impl Application for Jams {
 
             Message::ResumeCurrentTrack => {
                 self.last_tick = Instant::now();
-                self.alt_player.player.play();
+                self.audio_player.player.play();
                 //self.audio_player.player.play();
                 self.global_play_state = PlayState::Playing;
                 for file in &mut self.scanned_files {
@@ -922,7 +922,7 @@ impl Jams {
     }
 
     pub fn switch_track(&mut self, uri: String) {
-        self.alt_player.player.stop();
+        self.audio_player.player.stop();
 
         for file in &mut self.scanned_files {
             file.paused = false;
@@ -934,9 +934,9 @@ impl Jams {
             }
         }
 
-        self.alt_player.player.set_uri(Some(uri.as_str()));
+        self.audio_player.player.set_uri(Some(uri.as_str()));
 
-        self.alt_player.player.play();
+        self.audio_player.player.play();
 
         self.last_tick = Instant::now();
         self.seek_position = Duration::default();
@@ -955,7 +955,7 @@ impl Jams {
             percent
         );
         self.seek_position = Duration::from_secs(pos as u64);
-        self.alt_player
+        self.audio_player
             .player
             .seek(ClockTime::from_seconds(pos as u64));
     }
