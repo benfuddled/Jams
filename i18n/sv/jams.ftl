@@ -11,4 +11,5 @@ debug = Felsökning
 debug-play = Spela upp exempelfil
 debug-file-listing = Lista filer från katalog
 debug-file-play = Öppna fil och spela upp
+debug-gstreamer-file = Open File And Play With Gstreamer
 add-folder = Lägg till katalog

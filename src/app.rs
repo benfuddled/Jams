@@ -1,45 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::{io, thread};
-
-use crate::{fl, icon_cache};
+use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
-use cosmic::iced_core;
-use cosmic::widget::{
-    self, button, icon, menu, nav_bar, slider, text, Button, Column, Container, Row,
-};
+use cosmic::widget::{self, button, icon, menu, nav_bar, slider, text, Column, Container, Row};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
-use log::{error, info};
-use std::fs;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
-use rodio::source::SineWave;
-use rodio::{source::Source, Decoder, OutputStream, Sink};
-use std::fs::{DirEntry, File};
-use std::io::BufReader;
-use std::num::ParseIntError;
+use std::fs::File;
+use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-// use cosmic_files::{
-//     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
-//     mime_icon::{mime_for_path, mime_icon},
-// };
+use infer::Infer;
 
 use crate::icon_cache::IconCache;
-use cosmic::dialog::file_chooser::{self, FileFilter};
+use cosmic::dialog::file_chooser::{self};
 use cosmic::iced_widget::Scrollable;
-use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
-use symphonia::core::errors::Error;
-use symphonia::core::formats::{Cue, FormatOptions, Track};
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::{ColorMode, MetadataOptions, MetadataRevision, Tag, Value, Visual};
-use symphonia::core::probe::{Hint, ProbeResult};
 use url::Url;
 use walkdir::WalkDir;
+
+use gstreamer as gst;
+use gstreamer::prelude::*;
+use gstreamer::{glib, ClockTime};
+use gstreamer_pbutils::DiscovererResult;
+use gstreamer_play as gst_play;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 
@@ -65,8 +52,7 @@ pub struct Jams {
     nav: nav_bar::Model,
     /// A vector that contains the list of scanned files
     scanned_files: Vec<MusicFile>,
-    thing: Arc<i32>,
-    audio_player: RodioAudioPlayer,
+    audio_player: GStreamerPlayer,
     global_play_state: PlayState,
     current_track_duration: Duration,
     seek_position: Duration,
@@ -74,13 +60,9 @@ pub struct Jams {
     scrub_value: u8,
 }
 
-/// The AudioPlayer struct handles audio playback using the rodio backend.
-pub struct RodioAudioPlayer {
+pub struct GStreamerPlayer {
     /// The sink responsible for managing the audio playback.
-    player: rodio::Sink,
-    /// Keep OutputStream alive. Otherwise audio playback will NOT work
-    /// (sorry I don't make the rules)
-    _stream: rodio::OutputStream,
+    player: gst_play::Play,
     /// Store content for rewind/replay
     content: Vec<u8>,
 }
@@ -88,25 +70,17 @@ pub struct RodioAudioPlayer {
 #[derive(Clone, Debug)]
 pub struct MusicFile {
     saved_path: PathBuf,
-    metadata: MetadataRevision,
+    uri: String,
     playing: bool,
     paused: bool,
     track_title: String,
     track_number: u16,
+    duration: Duration,
     artist: String,
     album: String,
     album_artist: String,
     date: String,
 }
-
-// #[derive(Default)]
-// enum WatchState {
-//     #[default]
-//     Idle,
-//     Ticking {
-//         last_tick: Instant,
-//     },
-// }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
 /// This is used to communicate between the different parts of your application.
@@ -115,23 +89,21 @@ pub struct MusicFile {
 pub enum Message {
     LaunchUrl(String),
     ToggleContextPage(ContextPage),
-    DebugScan,
     Cancelled,
     CloseError,
     Error(String),
     FileRead(Url, String),
     OpenError(Arc<file_chooser::Error>),
-    OpenFile,
-    Selected(Url),
     AddFolder,
     AddSongsToLibrary(Url),
-    StartPlayingNewTrack(PathBuf),
+    StartPlayingNewTrack(String),
     PauseCurrentTrack,
     ResumeCurrentTrack,
     WatchTick(Instant),
     Scrub(u8),
     SkipNext,
     SkipPrev,
+    DebugStub,
 }
 
 /// Identifies a page in the application.
@@ -168,8 +140,7 @@ impl ContextPage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuAction {
     About,
-    DebugScan,
-    OpenFile,
+    DebugStub,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -178,8 +149,7 @@ impl menu::action::MenuAction for MenuAction {
     fn message(&self) -> Self::Message {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
-            MenuAction::DebugScan => Message::DebugScan,
-            MenuAction::OpenFile => Message::OpenFile,
+            MenuAction::DebugStub => Message::DebugStub,
         }
     }
 }
@@ -247,16 +217,14 @@ impl Application for Jams {
 
         let scanned_files = vec![];
 
-        let thing = Arc::new(5);
+        gst::init().expect("Could not initialize GStreamer.");
 
-        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-        let player = Sink::try_new(&stream_handle).unwrap();
-        let mut content = Vec::new();
+        let play = gst_play::Play::new(None::<gst_play::PlayVideoRenderer>);
+        let gst_content = Vec::new();
 
-        let mut audio_player = RodioAudioPlayer {
-            player,
-            _stream,
-            content,
+        let mut audio_player = GStreamerPlayer {
+            player: play,
+            content: gst_content,
         };
 
         let mut global_play_state: PlayState = PlayState::default();
@@ -267,7 +235,6 @@ impl Application for Jams {
             key_binds: HashMap::new(),
             nav,
             scanned_files,
-            thing,
             audio_player,
             global_play_state,
             scrub_value: 50,
@@ -295,10 +262,11 @@ impl Application for Jams {
                 menu::root(fl!("debug")),
                 menu::items(
                     &self.key_binds,
-                    vec![
-                        menu::Item::Button(fl!("debug-file-listing"), None, MenuAction::DebugScan),
-                        menu::Item::Button(fl!("debug-file-play"), None, MenuAction::OpenFile),
-                    ],
+                    vec![menu::Item::Button(
+                        fl!("debug"),
+                        None,
+                        MenuAction::DebugStub,
+                    )],
                 ),
             ),
         ]);
@@ -318,25 +286,21 @@ impl Application for Jams {
         let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
-        if (&self.scanned_files.len() > &0) {
+        if &self.scanned_files.len() > &0 {
             let mut file_col = Column::new().spacing(2);
 
             for file in &self.scanned_files {
-                //println!("Name: {}", file.saved_path.display());
-
-                //let mut file_txt_container = Container::new(file_txt).width(Length::Fill);
-
                 let mut file_txt_row = Row::new()
                     .align_y(Alignment::Center)
                     .spacing(5)
                     .padding([6, 4, 6, 4]);
 
-                if (file.paused == true) {
+                if file.paused == true {
                     //let resume_txt = text("Resume");
                     let button = button::icon(icon::from_name("media-playback-start-symbolic"))
                         .on_press(Message::ResumeCurrentTrack);
                     file_txt_row = file_txt_row.push(button);
-                } else if (file.playing == true) {
+                } else if file.playing == true {
                     //let playing_txt = text("Pause");
                     let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
                         .on_press(Message::PauseCurrentTrack);
@@ -344,7 +308,7 @@ impl Application for Jams {
                 } else {
                     //let paused_txt = text("Play");
                     let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .on_press(Message::StartPlayingNewTrack(file.saved_path.clone()));
+                        .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
                     file_txt_row = file_txt_row.push(button);
                 }
 
@@ -553,30 +517,9 @@ impl Application for Jams {
                         / self.current_track_duration.as_secs() as f64
                         * 100.0) as u8;
 
-                    if (self.seek_position.as_millis() >= self.current_track_duration.as_millis()) {
+                    if self.seek_position.as_millis() >= self.current_track_duration.as_millis() {
                         println!("{}", String::from("End of track reached."));
                         self.global_play_state = PlayState::Idle;
-
-                        // let next_track = self.scanned_files
-                        //     .iter()
-                        //     .filter(|x| x.playing == true).next();
-
-                        // let next_track = self.scanned_files
-                        //     .iter()
-                        //     .filter(|x| x.playing == true).cloned().next();
-                        //
-                        //
-                        //     // .next();
-                        //
-                        // for file in self.scanned_files.iter_mut() {
-                        //     if (file.playing == true) {
-                        //         file.playing = false;
-                        //     }
-                        // }
-
-                        // let next_index = self.scanned_files
-                        //     .iter()
-                        //     .position(|x| x.playing == true) + 1;
 
                         let next_index = self
                             .scanned_files
@@ -594,7 +537,7 @@ impl Application for Jams {
                                 self.audio_player.player.stop();
                                 self.global_play_state = PlayState::Idle;
                                 self.current_track_duration = Duration::new(0, 0);
-                                self.switch_track(track.saved_path.clone());
+                                self.switch_track(track.uri.clone());
                             }
                             None => {
                                 println!("End of list reached. Stopping playback.");
@@ -625,7 +568,7 @@ impl Application for Jams {
                         self.audio_player.player.stop();
                         self.global_play_state = PlayState::Idle;
                         self.current_track_duration = Duration::new(0, 0);
-                        self.switch_track(track.saved_path.clone());
+                        self.switch_track(track.uri.clone());
                     }
                     None => {
                         println!("End of list reached. Stopping playback.");
@@ -644,7 +587,7 @@ impl Application for Jams {
 
                 match curr_index {
                     Some(index) => {
-                        if (index == 0) {
+                        if index == 0 {
                             self.scrub(0);
                         } else {
                             let prev_file = self.scanned_files.get(index - 1);
@@ -653,10 +596,9 @@ impl Application for Jams {
                                 Some(track) => {
                                     println!("Moving to prev track: {}", track.track_title);
                                     self.seek_position = Duration::new(0, 0);
-                                    self.audio_player.player.stop();
                                     self.global_play_state = PlayState::Idle;
                                     self.current_track_duration = Duration::new(0, 0);
-                                    self.switch_track(track.saved_path.clone());
+                                    self.switch_track(track.uri.clone());
                                 }
                                 None => {
                                     println!("End of list reached. Stopping playback.");
@@ -677,21 +619,6 @@ impl Application for Jams {
                 let _result = open::that_detached(url);
             }
 
-            Message::DebugScan => {
-                let paths = fs::read_dir("./").unwrap();
-
-                for path in paths {
-                    //println!("Name: {}", path.unwrap().path().display());
-                    //self.scanned_files.push(path.unwrap().path());
-                }
-
-                self.audio_player.player.pause();
-
-                // for file in &self.scanned_files {
-                //     println!("Name: {}", file.display());
-                // }
-            }
-
             Message::AddFolder => {
                 return cosmic::task::future(async move {
                     let dialog = file_chooser::open::Dialog::new().title(fl!("add-folder"));
@@ -705,49 +632,20 @@ impl Application for Jams {
                     }
                 });
             }
-
             Message::AddSongsToLibrary(url) => {
-                let paths = fs::read_dir(url.to_file_path().unwrap()).unwrap();
+                let timeout = 5 * gst::ClockTime::SECOND;
+                let discoverer = gstreamer_pbutils::Discoverer::new(timeout).unwrap();
 
-                for entry in WalkDir::new(url.to_file_path().unwrap()).into_iter().filter_map(|e| e.ok())
+                for entry in WalkDir::new(url.to_file_path().unwrap())
+                    .into_iter()
+                    .filter_map(|e| e.ok())
                 {
-                    let new_path = entry.into_path().clone();
-                    let saved_path = new_path.clone();
-
-                    // Create a hint to help the format registry guess what format reader is appropriate.
-                    let mut hint = Hint::new();
-
-                    // Open the media source.
-                    let src = std::fs::File::open(new_path).expect("failed to open media");
-
-                    // Create the media source stream.
-                    let mss = MediaSourceStream::new(Box::new(src), Default::default());
-
-                    // Use the default options for metadata and format readers.
-                    let metadata_opts: MetadataOptions = Default::default();
-                    let format_opts: FormatOptions = Default::default();
-
-                    let no_progress = false;
-
-                    // Probe the media source stream for metadata and get the format reader.
-                    match symphonia::default::get_probe().format(
-                        &hint,
-                        mss,
-                        &format_opts,
-                        &metadata_opts,
-                    ) {
-                        Ok(mut probed) => {
-                            //print_tracks(probed.format.tracks());
-
-                            // Prefer metadata that's provided in the container format, over other tags found during the
-                            // probe operation.
-                            if let Some(metadata_rev) = probed.format.metadata().current() {
-                                //print_tags(metadata_rev.tags());
-                                // print_visuals(metadata_rev.visuals());
-
-                                let metadata = metadata_rev.clone();
-
-                                let tags = metadata.tags();
+                    let is_audio = is_audio_file(entry.path()).unwrap_or_else(|err| false);
+                    if entry.file_type().is_file() && is_audio {
+                        let saved_path = entry.clone().into_path();
+                        match Url::from_file_path(entry.into_path().clone()) {
+                            Ok(url) => {
+                                println!("url {}", url);
 
                                 let mut track_title = String::from("");
                                 let mut album = String::from("");
@@ -755,191 +653,133 @@ impl Application for Jams {
                                 let mut album_artist = String::from("");
                                 let mut date = String::from("");
                                 let mut track_number = 0;
+                                let mut duration = Duration::default();
 
-                                let mut idx = 1;
-
-                                // Print tags with a standard tag key first, these are the most common tags.
-                                for tag in tags.iter().filter(|tag| tag.is_known()) {
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "TrackTitle") {
-                                            track_title = tag.value.to_string();
-                                            //println!("{}", &tag.value);
-                                        }
-                                        println!(
-                                            "{}",
-                                            print_tag_item(
-                                                idx,
-                                                &format!("{:?}", std_key),
-                                                &tag.value,
-                                                4
-                                            )
-                                        );
+                                match discoverer.discover_uri(url.as_str()) {
+                                    Err(err) => {
+                                        println!("{:?}", err);
                                     }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "Album") {
-                                            album = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "AlbumArtist") {
-                                            album_artist = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "Artist") {
-                                            artist = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "Date") {
-                                            date = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "TrackNumber") {
-
-                                            match tag.value.to_string().parse::<u16>() {
-                                                Ok(num) => {
-                                                    track_number = num;
+                                    Ok(info) => {
+                                        match info.result() {
+                                            DiscovererResult::Ok => println!("Discovered {url}"),
+                                            DiscovererResult::UriInvalid => {
+                                                println!("Invalid uri {url}")
+                                            }
+                                            DiscovererResult::Error => {
+                                                println!("Error in DiscovererResult")
+                                                // if let Some(msg) = error {
+                                                //     println!("{msg}");
+                                                // } else {
+                                                //     println!("Unknown error")
+                                                // }
+                                            }
+                                            DiscovererResult::Timeout => println!("Timeout"),
+                                            DiscovererResult::Busy => println!("Busy"),
+                                            DiscovererResult::MissingPlugins => {
+                                                if let Some(s) = info.misc() {
+                                                    println!("{s}");
                                                 }
-                                                Err(err) => {
-                                                    println!("Track {} invalid. Assigning 0. {}", tag.value, err);
-                                                    track_number = 0;
+                                            }
+                                            _ => println!("Unknown result"),
+                                        }
+
+                                        if info.result() == DiscovererResult::Ok {
+                                            match info.duration() {
+                                                None => {}
+                                                Some(time) => {
+                                                    duration = Duration::from(time);
+                                                }
+                                            };
+                                            if let Some(tags) = info.tags() {
+                                                println!("Tags:");
+                                                for (tag, values) in tags.iter_generic() {
+                                                    // println!("{:?}", values);
+                                                    // print!("  {tag}: ");
+                                                    if tag == "title" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                track_title = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "album" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                album = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "artist" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                artist = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "album-artist" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                album_artist = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "datetime" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                date = s;
+                                                            }
+                                                        })
+                                                    } else if tag == "track-number" {
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                match s.parse::<u16>() {
+                                                                    Ok(num) => {
+                                                                        track_number = num;
+                                                                    }
+                                                                    Err(err) => {
+                                                                        println!("Track {} invalid. Assigning 0. {}", s, err);
+                                                                        track_number = 0;
+                                                                    }
+                                                                }
+                                                            }
+                                                        })
+                                                    }
                                                 }
                                             }
                                         }
+
+                                        let music_file = MusicFile {
+                                            saved_path: saved_path.clone(),
+                                            uri: url.to_string(),
+                                            //metadata,
+                                            track_title,
+                                            track_number,
+                                            artist,
+                                            album,
+                                            album_artist,
+                                            duration,
+                                            playing: false,
+                                            paused: false,
+                                            date,
+                                        };
+
+                                        self.scanned_files.push(music_file);
                                     }
-                                    idx += 1;
                                 }
-
-                                let mut music_file = MusicFile {
-                                    saved_path,
-                                    metadata,
-                                    track_title,
-                                    track_number,
-                                    artist,
-                                    album,
-                                    album_artist,
-                                    playing: false,
-                                    paused: false,
-                                    date,
-                                };
-
-                                self.scanned_files.push(music_file);
-
-                                // Warn that certain tags are preferred.
-                                if probed.metadata.get().as_ref().is_some() {
-                                    info!("tags that are part of the container format are preferentially printed.");
-                                    info!("not printing additional tags that were found while probing.");
-                                }
-                            } else if let Some(metadata_rev) =
-                                probed.metadata.get().as_ref().and_then(|m| m.current())
-                            {
-                                //print_tags(metadata_rev.tags());
-                                // print_visuals(metadata_rev.visuals());
-
-                                let metadata = metadata_rev.clone();
-
-                                let tags = metadata.tags();
-
-                                let mut track_title = String::from("");
-                                let mut album = String::from("");
-                                let mut artist = String::from("");
-                                let mut album_artist = String::from("");
-                                let mut date = String::from("");
-                                let mut track_number = 0;
-
-                                let mut idx = 1;
-
-                                // Print tags with a standard tag key first, these are the most common tags.
-                                for tag in tags.iter().filter(|tag| tag.is_known()) {
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "TrackTitle") {
-                                            track_title = tag.value.to_string();
-                                            //println!("{}", &tag.value);
-                                        }
-                                        println!(
-                                            "{}",
-                                            print_tag_item(
-                                                idx,
-                                                &format!("{:?}", std_key),
-                                                &tag.value,
-                                                4
-                                            )
-                                        );
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "Album") {
-                                            album = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "AlbumArtist") {
-                                            album_artist = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "Artist") {
-                                            artist = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "Date") {
-                                            date = tag.value.to_string();
-                                        }
-                                    }
-                                    if let Some(std_key) = tag.std_key {
-                                        if (&format!("{:?}", std_key) == "TrackNumber") {
-
-                                            match tag.value.to_string().parse::<u16>() {
-                                                Ok(num) => {
-                                                    track_number = num;
-                                                }
-                                                Err(err) => {
-                                                    println!("Track {} invalid. Assigning 0. {}", tag.value, err);
-                                                    track_number = 0;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    idx += 1;
-                                }
-
-                                let mut music_file = MusicFile {
-                                    saved_path,
-                                    metadata,
-                                    track_title,
-                                    track_number,
-                                    artist,
-                                    album,
-                                    album_artist,
-                                    playing: false,
-                                    paused: false,
-                                    date,
-                                };
-
-                                self.scanned_files.push(music_file);
                             }
-                            // print_format_sans_path(&mut probed);
-                        }
-                        Err(err) => {
-                            // The input was not supported by any format reader.
-                            info!("the input is not supported");
+                            Err(err) => eprintln!("Failed to run discovery: {err:?}"),
                         }
                     }
                 }
             }
 
-            Message::StartPlayingNewTrack(file_path) => {
-                self.switch_track(file_path);
+            Message::StartPlayingNewTrack(uri) => {
+                self.switch_track(uri);
             }
 
             Message::PauseCurrentTrack => {
                 self.audio_player.player.pause();
+                //self.audio_player.player.pause();
                 self.global_play_state = PlayState::Paused;
 
                 for file in &mut self.scanned_files {
-                    if (file.playing == true) {
+                    if file.playing == true {
                         file.playing = false;
                         file.paused = true;
                     }
@@ -949,41 +789,14 @@ impl Application for Jams {
             Message::ResumeCurrentTrack => {
                 self.last_tick = Instant::now();
                 self.audio_player.player.play();
+                //self.audio_player.player.play();
                 self.global_play_state = PlayState::Playing;
                 for file in &mut self.scanned_files {
-                    if (file.paused == true) {
+                    if file.paused == true {
                         file.playing = true;
                         file.paused = false;
                     }
                 }
-            }
-
-            // Creates a new open dialog.
-            // https://github.com/pop-os/libcosmic/blob/master/examples/open-dialog/src/main.rs
-            Message::OpenFile => {
-                return cosmic::task::future(async move {
-                    eprintln!("opening new dialog");
-
-                    #[cfg(feature = "rfd")]
-                    let filter = FileFilter::new("Music files").extension("mp3");
-
-                    #[cfg(feature = "xdg-portal")]
-                    let filter = FileFilter::new("Music files").glob("*.mp3");
-
-                    let dialog = file_chooser::open::Dialog::new()
-                        // Sets title of the dialog window.
-                        .title("Choose a file")
-                        // Accept only plain text files
-                        .filter(filter);
-
-                    match dialog.open_file().await {
-                        Ok(response) => Message::Selected(response.url().to_owned()),
-
-                        Err(file_chooser::Error::Cancelled) => Message::Cancelled,
-
-                        Err(why) => Message::OpenError(Arc::new(why)),
-                    }
-                });
             }
 
             // Displays an error in the application's warning bar.
@@ -1011,74 +824,6 @@ impl Application for Jams {
             Message::CloseError => {}
             Message::FileRead(_, _) => {}
 
-            Message::Selected(url) => {
-                eprintln!("selected file");
-                //
-                // // Take existing file contents buffer to reuse its allocation.
-                // let mut contents = String::new();
-                // std::mem::swap(&mut contents, &mut self.file_contents);
-                //
-                // // Set the file's URL as the application title.
-                // self.set_header_title(url.to_string());
-                //
-                // // Reads the selected file into memory.
-                // return cosmic::command::future(async move {
-                //     // Check if its a valid local file path.
-                //     let path = match url.scheme() {
-                //         "file" => url.to_file_path().unwrap(),
-                //         other => {
-                //             return Message::Error(format!("{url} has unknown scheme: {other}"));
-                //         }
-                //     };
-                //
-                //     // Open the file by its path.
-                //     let mut file = match tokio::fs::File::open(&path).await {
-                //         Ok(file) => file,
-                //         Err(why) => {
-                //             return Message::Error(format!(
-                //                 "failed to open {}: {why}",
-                //                 path.display()
-                //             ));
-                //         }
-                //     };
-                //
-                //     // Read the file into our contents buffer.
-                //     contents.clear();
-                //
-                //     if let Err(why) = file.read_to_string(&mut contents).await {
-                //         return Message::Error(format!("failed to read {}: {why}", path.display()));
-                //     }
-                //
-                //     contents.shrink_to_fit();
-                //
-                //     // Send this back to the application.
-                //     Message::FileRead(url, contents)
-                // });
-
-                println!("{}", url.as_str());
-                println!("{:?}", url.to_file_path().unwrap());
-                println!("{}", Path::new(url.as_str()).is_file());
-
-                let file = BufReader::new(File::open(url.to_file_path().unwrap()).unwrap());
-
-                let source = Decoder::new(file).unwrap();
-
-                // Turns out I just had wrap this guy in a struct,
-                // I think because the stream needs to stay alive or audio won't play.
-                // (_stream is a field in this struct)
-                // (tested without the _stream field and audio didn't work jsyk)
-                // Sleep until end is completely unnecessary in this case because
-                // libcosmic keeps the main thread alive.
-                // And I don't have to make a second thread because
-                // rodio is already doing that in the background
-                // holy smokes
-                self.audio_player.player.append(source);
-                // When you append a source to the player it immediately starts playing
-                // but if you pause and append another thing it don't start playing again
-                // therefore, we make sure to call play every time.
-                self.audio_player.player.play();
-            }
-
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -1091,6 +836,9 @@ impl Application for Jams {
             }
             Message::Scrub(value) => {
                 self.scrub(value);
+            }
+            Message::DebugStub => {
+                println!("This doesn't do anything right now.");
             }
         }
         Task::none()
@@ -1159,47 +907,21 @@ impl Jams {
         self.set_window_title(window_title)
     }
 
-    pub fn switch_track(&mut self, file_path: PathBuf) {
+    pub fn switch_track(&mut self, uri: String) {
         self.audio_player.player.stop();
 
         for file in &mut self.scanned_files {
             file.paused = false;
-            if (file.saved_path == file_path) {
+            if file.uri == uri {
                 file.playing = true;
+                self.current_track_duration = file.duration;
             } else {
                 file.playing = false;
             }
         }
 
-        // let temp_duration = mp3_duration::from_path(&file_path).unwrap();
-        // println!("File duration: {:?}", temp_duration);
+        self.audio_player.player.set_uri(Some(uri.as_str()));
 
-        let file = BufReader::new(File::open(&file_path).unwrap());
-
-        let source = Decoder::new(file).unwrap();
-
-        println!("{:?}", source.total_duration());
-
-        self.current_track_duration = match source.total_duration() {
-            None => mp3_duration::from_path(&file_path).unwrap(),
-            Some(duration) => duration,
-        };
-
-        // self.current_track_duration = source.total_duration().unwrap();
-
-        // Turns out I just had wrap this guy in a struct,
-        // I think because the stream needs to stay alive or audio won't play.
-        // (_stream is a field in this struct)
-        // (tested without the _stream field and audio didn't work jsyk)
-        // Sleep until end is completely unnecessary in this case because
-        // libcosmic keeps the main thread alive.
-        // And I don't have to make a second thread because
-        // rodio is already doing that in the background
-        // holy smokes
-        self.audio_player.player.append(source);
-        // When you append a source to the player it immediately starts playing
-        // but if you pause and append another thing it don't start playing again
-        // therefore, we make sure to call play every time.
         self.audio_player.player.play();
 
         self.last_tick = Instant::now();
@@ -1210,7 +932,7 @@ impl Jams {
 
     pub fn scrub(&mut self, value: u8) {
         self.scrub_value = value;
-        let percent: f64 = (f64::from(value) / 100.0);
+        let percent: f64 = f64::from(value) / 100.0;
         let pos = self.current_track_duration.as_secs() as f64 * percent;
         println!(
             "scrub {}, pos {}, percent {}",
@@ -1221,362 +943,25 @@ impl Jams {
         self.seek_position = Duration::from_secs(pos as u64);
         self.audio_player
             .player
-            .try_seek(self.seek_position)
-            .unwrap();
+            .seek(ClockTime::from_seconds(pos as u64));
     }
 }
 
-fn print_format_sans_path(probed: &mut ProbeResult) {
-    print_tracks(probed.format.tracks());
+fn is_audio_file(path: &Path) -> std::io::Result<bool> {
+    let mut file = File::open(path)?;
+    let mut buf = [0; 1024]; // Read first KB for detection
+    file.read_exact(&mut buf)?;
 
-    // Prefer metadata that's provided in the container format, over other tags found during the
-    // probe operation.
-    if let Some(metadata_rev) = probed.format.metadata().current() {
-        // print_tags(metadata_rev.tags());
-        // print_visuals(metadata_rev.visuals());
-
-        // Warn that certain tags are preferred.
-        if probed.metadata.get().as_ref().is_some() {
-            info!("tags that are part of the container format are preferentially printed.");
-            info!("not printing additional tags that were found while probing.");
-        }
-    } else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
-        print_tags(metadata_rev.tags());
-        print_visuals(metadata_rev.visuals());
-    }
-
-    // print_cues(probed.format.cues());
-    // println!(":");
-    // println!();
+    let info = Infer::new();
+    Ok(info.is_audio(&buf))
 }
 
-fn read_media_metadata() {
-    let path = Path::new("");
-
-    // Create a hint to help the format registry guess what format reader is appropriate.
-    let mut hint = Hint::new();
-
-    // Open the media source.
-    let src = std::fs::File::open(path).expect("failed to open media");
-
-    // Create the media source stream.
-    let mss = MediaSourceStream::new(Box::new(src), Default::default());
-
-    // Use the default options for metadata and format readers.
-    let metadata_opts: MetadataOptions = Default::default();
-    let format_opts: FormatOptions = Default::default();
-
-    // Get the value of the track option, if provided.
-    // let track = match args.value_of("track") {
-    //     Some(track_str) => track_str.parse::<usize>().ok(),
-    //     _ => None,
-    // };
-
-    let no_progress = false;
-
-    // Probe the media source stream for metadata and get the format reader.
-    match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
-        Ok(mut probed) => {
-            // Dump visuals if requested.
-            // if args.is_present("dump-visuals") {
-            //     let name = match path.file_name() {
-            //         Some(name) if name != "-" => name,
-            //         _ => OsStr::new("NoName"),
-            //     };
-            //
-            //     dump_visuals(&mut probed, name);
-            // }
-
-            // Select the operating mode.
-            // if args.is_present("verify-only") {
-            //     // Verify-only mode decodes and verifies the audio, but does not play it.
-            //     decode_only(probed.format, &DecoderOptions { verify: true, ..Default::default() })
-            // }
-            // else if args.is_present("decode-only") {
-            //     // Decode-only mode decodes the audio, but does not play or verify it.
-            //     decode_only(probed.format, &DecoderOptions { verify: false, ..Default::default() })
-            // }
-            // else if args.is_present("probe-only") {
-            // Probe-only mode only prints information about the format, tracks, metadata, etc.
-            print_format(path, &mut probed);
-            //}
-            // else {
-            //     // Playback mode.
-            //     print_format(path, &mut probed);
-            //
-            //     // If present, parse the seek argument.
-            //     let seek = if let Some(time) = args.value_of("seek") {
-            //         Some(SeekPosition::Time(time.parse::<f64>().unwrap_or(0.0)))
-            //     }
-            //     else {
-            //         args.value_of("seek-ts")
-            //             .map(|ts| SeekPosition::Timetamp(ts.parse::<u64>().unwrap_or(0)))
-            //     };
-            //
-            //     // Set the decoder options.
-            //     let decode_opts =
-            //         DecoderOptions { verify: args.is_present("verify"), ..Default::default() };
-            //
-            //     // Play it!
-            //     play(probed.format, track, seek, &decode_opts, no_progress)
-            // }
-        }
-        Err(err) => {
-            // The input was not supported by any format reader.
-            info!("the input is not supported");
-        }
+fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
+    if let Ok(s) = v.get::<&str>() {
+        Some(s.to_string())
+    } else if let Ok(serialized) = v.serialize() {
+        Some(serialized.into())
+    } else {
+        None
     }
-}
-
-fn print_format(path: &Path, probed: &mut ProbeResult) {
-    println!("+ {}", path.display());
-    print_tracks(probed.format.tracks());
-
-    // Prefer metadata that's provided in the container format, over other tags found during the
-    // probe operation.
-    if let Some(metadata_rev) = probed.format.metadata().current() {
-        print_tags(metadata_rev.tags());
-        print_visuals(metadata_rev.visuals());
-
-        // Warn that certain tags are preferred.
-        if probed.metadata.get().as_ref().is_some() {
-            info!("tags that are part of the container format are preferentially printed.");
-            info!("not printing additional tags that were found while probing.");
-        }
-    } else if let Some(metadata_rev) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
-        print_tags(metadata_rev.tags());
-        print_visuals(metadata_rev.visuals());
-    }
-
-    print_cues(probed.format.cues());
-    println!(":");
-    println!();
-}
-
-fn print_cues(cues: &[Cue]) {
-    if !cues.is_empty() {
-        println!("|");
-        println!("| // Cues //");
-
-        for (idx, cue) in cues.iter().enumerate() {
-            println!("|     [{:0>2}] Track:      {}", idx + 1, cue.index);
-            println!("|          Timestamp:  {}", cue.start_ts);
-
-            // Print tags associated with the Cue.
-            if !cue.tags.is_empty() {
-                println!("|          Tags:");
-
-                for (tidx, tag) in cue.tags.iter().enumerate() {
-                    if let Some(std_key) = tag.std_key {
-                        println!(
-                            "{}",
-                            print_tag_item(tidx + 1, &format!("{:?}", std_key), &tag.value, 21)
-                        );
-                    } else {
-                        println!("{}", print_tag_item(tidx + 1, &tag.key, &tag.value, 21));
-                    }
-                }
-            }
-
-            // Print any sub-cues.
-            if !cue.points.is_empty() {
-                println!("|          Sub-Cues:");
-
-                for (ptidx, pt) in cue.points.iter().enumerate() {
-                    println!(
-                        "|                      [{:0>2}] Offset:    {:?}",
-                        ptidx + 1,
-                        pt.start_offset_ts
-                    );
-
-                    // Start the number of sub-cue tags, but don't print them.
-                    if !pt.tags.is_empty() {
-                        println!(
-                            "|                           Sub-Tags:  {} (not listed)",
-                            pt.tags.len()
-                        );
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn print_tracks(tracks: &[Track]) {
-    if !tracks.is_empty() {
-        println!("|");
-        println!("| // Tracks //");
-
-        for (idx, track) in tracks.iter().enumerate() {
-            let params = &track.codec_params;
-
-            print!("|     [{:0>2}] Codec:           ", idx + 1);
-
-            if let Some(codec) = symphonia::default::get_codecs().get_codec(params.codec) {
-                println!("{} ({})", codec.long_name, codec.short_name);
-            } else {
-                println!("Unknown (#{})", params.codec);
-            }
-
-            // if let Some(sample_rate) = params.sample_rate {
-            //     println!("|          Sample Rate:     {}", sample_rate);
-            // }
-            // if params.start_ts > 0 {
-            //     if let Some(tb) = params.time_base {
-            //         println!(
-            //             "|          Start Time:      {} ({})",
-            //             fmt_time(params.start_ts, tb),
-            //             params.start_ts
-            //         );
-            //     }
-            //     else {
-            //         println!("|          Start Time:      {}", params.start_ts);
-            //     }
-            // }
-            // if let Some(n_frames) = params.n_frames {
-            //     if let Some(tb) = params.time_base {
-            //         println!(
-            //             "|          Duration:        {} ({})",
-            //             fmt_time(n_frames, tb),
-            //             n_frames
-            //         );
-            //     }
-            //     else {
-            //         println!("|          Frames:          {}", n_frames);
-            //     }
-            // }
-            // if let Some(tb) = params.time_base {
-            //     println!("|          Time Base:       {}", tb);
-            // }
-            // if let Some(padding) = params.delay {
-            //     println!("|          Encoder Delay:   {}", padding);
-            // }
-            // if let Some(padding) = params.padding {
-            //     println!("|          Encoder Padding: {}", padding);
-            // }
-            // if let Some(sample_format) = params.sample_format {
-            //     println!("|          Sample Format:   {:?}", sample_format);
-            // }
-            // if let Some(bits_per_sample) = params.bits_per_sample {
-            //     println!("|          Bits per Sample: {}", bits_per_sample);
-            // }
-            // if let Some(channels) = params.channels {
-            //     println!("|          Channel(s):      {}", channels.count());
-            //     println!("|          Channel Map:     {}", channels);
-            // }
-            // if let Some(channel_layout) = params.channel_layout {
-            //     println!("|          Channel Layout:  {:?}", channel_layout);
-            // }
-            // if let Some(language) = &track.language {
-            //     println!("|          Language:        {}", language);
-            // }
-        }
-    }
-}
-
-fn print_visuals(visuals: &[Visual]) {
-    if !visuals.is_empty() {
-        println!("|");
-        println!("| // Visuals //");
-
-        for (idx, visual) in visuals.iter().enumerate() {
-            if let Some(usage) = visual.usage {
-                println!("|     [{:0>2}] Usage:      {:?}", idx + 1, usage);
-                println!("|          Media Type: {}", visual.media_type);
-            } else {
-                println!("|     [{:0>2}] Media Type: {}", idx + 1, visual.media_type);
-            }
-            if let Some(dimensions) = visual.dimensions {
-                println!(
-                    "|          Dimensions: {} px x {} px",
-                    dimensions.width, dimensions.height
-                );
-            }
-            if let Some(bpp) = visual.bits_per_pixel {
-                println!("|          Bits/Pixel: {}", bpp);
-            }
-            if let Some(ColorMode::Indexed(colors)) = visual.color_mode {
-                println!("|          Palette:    {} colors", colors);
-            }
-            println!("|          Size:       {} bytes", visual.data.len());
-
-            // Print out tags similar to how regular tags are printed.
-            if !visual.tags.is_empty() {
-                println!("|          Tags:");
-            }
-
-            for (tidx, tag) in visual.tags.iter().enumerate() {
-                if let Some(std_key) = tag.std_key {
-                    println!(
-                        "{}",
-                        print_tag_item(tidx + 1, &format!("{:?}", std_key), &tag.value, 21)
-                    );
-                } else {
-                    println!("{}", print_tag_item(tidx + 1, &tag.key, &tag.value, 21));
-                }
-            }
-        }
-    }
-}
-
-fn print_tags(tags: &[Tag]) {
-    if !tags.is_empty() {
-        println!("|");
-        println!("| // Tags //");
-
-        let mut idx = 1;
-
-        // Print tags with a standard tag key first, these are the most common tags.
-        for tag in tags.iter().filter(|tag| tag.is_known()) {
-            if let Some(std_key) = tag.std_key {
-                println!(
-                    "{}",
-                    print_tag_item(idx, &format!("{:?}", std_key), &tag.value, 4)
-                );
-            }
-            idx += 1;
-        }
-
-        // Print the remaining tags with keys truncated to 26 characters.
-        for tag in tags.iter().filter(|tag| !tag.is_known()) {
-            println!("{}", print_tag_item(idx, &tag.key, &tag.value, 4));
-            idx += 1;
-        }
-    }
-}
-
-fn print_tag_item(idx: usize, key: &str, value: &Value, indent: usize) -> String {
-    let key_str = match key.len() {
-        0..=28 => format!("| {:w$}[{:0>2}] {:<28} : ", "", idx, key, w = indent),
-        _ => format!(
-            "| {:w$}[{:0>2}] {:.<28} : ",
-            "",
-            idx,
-            key.split_at(26).0,
-            w = indent
-        ),
-    };
-
-    let line_prefix = format!("\n| {:w$} : ", "", w = indent + 4 + 28 + 1);
-    let line_wrap_prefix = format!("\n| {:w$}   ", "", w = indent + 4 + 28 + 1);
-
-    let mut out = String::new();
-
-    out.push_str(&key_str);
-
-    for (wrapped, line) in value.to_string().lines().enumerate() {
-        if wrapped > 0 {
-            out.push_str(&line_prefix);
-        }
-
-        let mut chars = line.chars();
-        let split = (0..)
-            .map(|_| chars.by_ref().take(72).collect::<String>())
-            .take_while(|s| !s.is_empty())
-            .collect::<Vec<_>>();
-
-        out.push_str(&split.join(&line_wrap_prefix));
-    }
-
-    out
 }
