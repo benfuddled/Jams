@@ -726,20 +726,19 @@ impl Application for Jams {
                                                             }
                                                         })
                                                     } else if tag == "track-number" {
-                                                        // values.for_each(|v| {
-                                                        //     match v.to_string().parse::<u16>() {
-                                                        //         Ok(num) => {
-                                                        //             track_number = num;
-                                                        //         }
-                                                        //         Err(err) => {
-                                                        //             //println!("Track {} invalid. Assigning 0. {}", v, err);
-                                                        //             track_number = 0;
-                                                        //         }
-                                                        //     }
-                                                        //     // if let Some(s) = send_value_as_str(v) {
-                                                        //     //     track_number = s;
-                                                        //     // }
-                                                        // })
+                                                        values.for_each(|v| {
+                                                            if let Some(s) = send_value_as_str(v) {
+                                                                match s.parse::<u16>() {
+                                                                    Ok(num) => {
+                                                                        track_number = num;
+                                                                    }
+                                                                    Err(err) => {
+                                                                        println!("Track {} invalid. Assigning 0. {}", s, err);
+                                                                        track_number = 0;
+                                                                    }
+                                                                }
+                                                            }
+                                                        })
                                                     }
                                                 }
                                             }
