@@ -655,9 +655,6 @@ impl Application for Jams {
             }
 
             Message::AddSongsToLibrary(url) => {
-                let timeout = 5 * gst::ClockTime::SECOND;
-                let discoverer = gstreamer_pbutils::Discoverer::new(timeout).unwrap();
-
                 for entry in WalkDir::new(url.to_file_path().unwrap())
                     .into_iter()
                     .filter_map(|e| e.ok())
@@ -667,47 +664,61 @@ impl Application for Jams {
                     if entry.file_type().is_file() && is_audio {
                         let saved_path = entry.clone().into_path();
                         println!("{}", entry.path().display());
-                        let tagged_file = match lofty::read_from_path(entry.path()) {
-                            Ok(file) => file,
-                            Err(err) => {
-                                eprintln!("Error reading file: {}", err);
-                                continue;
+                        match Url::from_file_path(entry.clone().into_path()) {
+                            Ok(url) => {
+                                let tagged_file = match lofty::read_from_path(entry.clone().path())
+                                {
+                                    Ok(file) => file,
+                                    Err(err) => {
+                                        eprintln!("Error reading file: {}", err);
+                                        continue;
+                                    }
+                                };
+
+                                if let Some(tag) = tagged_file.primary_tag() {
+                                    let track_title =
+                                        tag.title().map(|s| s.to_string()).unwrap_or_default();
+                                    let album =
+                                        tag.album().map(|s| s.to_string()).unwrap_or_default();
+                                    let artist =
+                                        tag.artist().map(|s| s.to_string()).unwrap_or_default();
+                                    let album_artist =
+                                        tag.artist().map(|s| s.to_string()).unwrap_or_default();
+                                    let date =
+                                        tag.year().map(|s| s.to_string()).unwrap_or_default();
+                                    let track_number = match tag.track().map(|s| s.to_string()) {
+                                        Some(track) => track.parse::<u16>().unwrap_or(0),
+                                        None => 0,
+                                    };
+
+                                    let properties =
+                                        lofty::prelude::AudioFile::properties(&tagged_file);
+                                    let duration =
+                                        Duration::from_secs(properties.duration().as_secs());
+
+                                    let music_file = MusicFile {
+                                        saved_path: saved_path.clone(),
+                                        uri: url.to_string(),
+                                        //metadata,
+                                        track_title,
+                                        track_number,
+                                        artist,
+                                        album,
+                                        album_artist,
+                                        duration,
+                                        playing: false,
+                                        paused: false,
+                                        date,
+                                    };
+
+                                    self.scanned_files.push(music_file);
+                                } else {
+                                    println!("No tags found in file");
+                                    continue;
+                                };
                             }
-                        };
-
-                        if let Some(tag) = tagged_file.primary_tag() {
-                            let track_title =
-                                tag.title().map(|s| s.to_string()).unwrap_or_default();
-                            let album = tag.album().map(|s| s.to_string()).unwrap_or_default();
-                            let artist = tag.artist().map(|s| s.to_string()).unwrap_or_default();
-                            let album_artist =
-                                tag.artist().map(|s| s.to_string()).unwrap_or_default();
-                            let date = String::from(" ");
-                            let track_number = 0;
-
-                            let properties = lofty::prelude::AudioFile::properties(&tagged_file);
-                            let duration = Duration::from_secs(properties.duration().as_secs());
-
-                            let music_file = MusicFile {
-                                saved_path: saved_path.clone(),
-                                uri: url.to_string(),
-                                //metadata,
-                                track_title,
-                                track_number,
-                                artist,
-                                album,
-                                album_artist,
-                                duration,
-                                playing: false,
-                                paused: false,
-                                date,
-                            };
-
-                            self.scanned_files.push(music_file);
-                        } else {
-                            println!("No tags found in file");
-                            continue;
-                        };
+                            Err(err) => eprintln!("Failed to run discovery: {err:?}"),
+                        }
                     }
                 }
             }
@@ -856,6 +867,7 @@ impl Jams {
         for file in &mut self.scanned_files {
             file.paused = false;
             if file.uri == uri {
+                println!("Switching to track: {}", uri);
                 file.playing = true;
                 self.current_track_duration = file.duration;
             } else {
