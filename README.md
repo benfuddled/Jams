@@ -15,6 +15,7 @@ A music player for the COSMIC desktop that you might want to use some day.
 - [ ] Shuffle
 - [ ] MPRIS support
 - [ ] Album view
+- [ ] Artist view
 
 ## 2.0 and Beyond
 
