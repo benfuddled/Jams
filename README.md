@@ -23,3 +23,4 @@ A music player for the COSMIC desktop that you might want to use some day.
 - [ ] Add to queue
 - [ ] Playlists
 - [ ] Visualizers
+- [ ] Tagged Mixes
