@@ -1,8 +1,8 @@
 # Jams (formerly YAMP)
 
-![image](https://github.com/user-attachments/assets/e37171aa-6e77-468a-94bc-607f486bad45)
-
 A music player for the COSMIC desktop that you might want to use some day.
+
+![image](https://github.com/user-attachments/assets/e37171aa-6e77-468a-94bc-607f486bad45)
 
 ## Journey to 1.0
 
@@ -20,6 +20,7 @@ A music player for the COSMIC desktop that you might want to use some day.
 ## 2.0 and Beyond
 
 - [ ] Listen history
+- [ ] Tree view
 - [ ] Add to queue
 - [ ] Playlists
 - [ ] Visualizers
