@@ -8,6 +8,7 @@ use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
 use cosmic::widget::{self, button, icon, menu, nav_bar, slider, text, Column, Container, Row};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use lofty::prelude::{Accessor, TaggedFileExt};
+use lofty::tag::ItemKey;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -69,19 +70,19 @@ pub struct GStreamerPlayer {
     content: Vec<u8>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct MusicFile {
+    album_artist: String,
+    album: String,
+    track_number: u16,
+    artist: String,
+    track_title: String,
+    duration: Duration,
+    date: String,
     saved_path: PathBuf,
     uri: String,
     playing: bool,
     paused: bool,
-    track_title: String,
-    track_number: u16,
-    duration: Duration,
-    artist: String,
-    album: String,
-    album_artist: String,
-    date: String,
 }
 
 // TODO: MAKE THESE SOME()
@@ -313,8 +314,11 @@ impl Application for Jams {
             for file in &self.scanned_files {
                 let mut file_txt_row = Row::new()
                     .align_y(Alignment::Center)
-                    .spacing(5)
+                    .spacing(8)
                     .padding([6, 4, 6, 4]);
+
+                let track_number = text(file.track_number.to_string()).align_x(Horizontal::Center).width(Length::FillPortion(1));
+                file_txt_row = file_txt_row.push(track_number);
 
                 if file.paused == true {
                     //let resume_txt = text("Resume");
@@ -333,9 +337,9 @@ impl Application for Jams {
                     file_txt_row = file_txt_row.push(button);
                 }
 
-                let title = text(file.track_title.clone()).width(Length::FillPortion(2));
-                let artist = text(file.artist.clone()).width(Length::FillPortion(1));
-                let album = text(file.album.clone()).width(Length::FillPortion(1));
+                let title = text(file.track_title.clone()).width(Length::FillPortion(40));
+                let artist = text(file.artist.clone()).width(Length::FillPortion(20));
+                let album = text(file.album.clone()).width(Length::FillPortion(20));
                 file_txt_row = file_txt_row.push(title);
                 file_txt_row = file_txt_row.push(artist);
                 file_txt_row = file_txt_row.push(album);
@@ -682,8 +686,10 @@ impl Application for Jams {
                                         tag.album().map(|s| s.to_string()).unwrap_or_default();
                                     let artist =
                                         tag.artist().map(|s| s.to_string()).unwrap_or_default();
-                                    let album_artist =
-                                        tag.artist().map(|s| s.to_string()).unwrap_or_default();
+                                    let album_artist = match tag.get_string(&ItemKey::AlbumArtist).map(|s| s.to_string()) {
+                                        Some(album_artist) => album_artist,
+                                        None => artist.clone(),
+                                    };
                                     let date =
                                         tag.year().map(|s| s.to_string()).unwrap_or_default();
                                     let track_number = match tag.track().map(|s| s.to_string()) {
@@ -697,18 +703,18 @@ impl Application for Jams {
                                         Duration::from_secs(properties.duration().as_secs());
 
                                     let music_file = MusicFile {
+                                        album_artist,
+                                        album,
+                                        track_number,
+                                        artist,
+                                        track_title,
+                                        duration,
+                                        date,
                                         saved_path: saved_path.clone(),
                                         uri: url.to_string(),
                                         //metadata,
-                                        track_title,
-                                        track_number,
-                                        artist,
-                                        album,
-                                        album_artist,
-                                        duration,
                                         playing: false,
                                         paused: false,
-                                        date,
                                     };
 
                                     self.scanned_files.push(music_file);
@@ -721,6 +727,10 @@ impl Application for Jams {
                         }
                     }
                 }
+
+                // https://rust-lang-nursery.github.io/rust-cookbook/algorithms/sorting.html#sort-a-vector-of-structs
+                // Sorts a vec of structs by its natural order (aka the order that was declared in the struct)
+                self.scanned_files.sort();
             }
 
             Message::StartPlayingNewTrack(uri) => {
