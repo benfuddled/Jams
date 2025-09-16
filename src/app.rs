@@ -2,7 +2,6 @@
 
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
-use cosmic::cosmic_theme::palette::stimulus::IntoStimulus;
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
 use cosmic::widget::{self, button, icon, menu, nav_bar, slider, text, Column, Container, Row};
@@ -28,7 +27,6 @@ use walkdir::WalkDir;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::{glib, ClockTime};
-use gstreamer_pbutils::DiscovererResult;
 use gstreamer_play as gst_play;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
@@ -680,8 +678,19 @@ impl Application for Jams {
                                 };
 
                                 if let Some(tag) = tagged_file.primary_tag() {
-                                    let track_title =
-                                        tag.title().map(|s| s.to_string()).unwrap_or_default();
+                                    let track_title = match tag.get_string(&ItemKey::TrackTitle).map(|s| s.to_string()) {
+                                        Some(title) => title,
+                                        None => {
+                                            // If there's no track tag, fall back to the file name.
+                                            match entry.path().file_name() {
+                                                Some(filename) => match filename.to_str() {
+                                                    Some(filename) => filename.to_string(),
+                                                    None => String::from(""),
+                                                }
+                                                None => String::from("")
+                                            }
+                                        }
+                                    };
                                     let album =
                                         tag.album().map(|s| s.to_string()).unwrap_or_default();
                                     let artist =
