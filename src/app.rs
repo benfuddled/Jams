@@ -123,6 +123,8 @@ pub enum Message {
     Scrub(u8),
     SkipNext,
     SkipPrev,
+    SearchExpand,
+    SearchInput(String),
     DebugStub,
 }
 
@@ -292,6 +294,41 @@ impl Application for Jams {
         ]);
 
         vec![menu_bar.into()]
+    }
+
+    fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
+        let mut elements = Vec::with_capacity(1);
+
+        //if let Some(term) = self.search_get() {
+            if self.core.is_condensed() {
+                elements.push(
+                    //TODO: selected state is not appearing different
+                    widget::button::icon(icon::from_name("system-search-symbolic"))
+                        .on_press(Message::PauseCurrentTrack)
+                        .padding(8)
+                        .selected(true)
+                        .into(),
+                );
+            } else {
+                elements.push(
+                    widget::text_input::search_input("", "")
+                        .width(Length::Fixed(240.0))
+                        //.id(self.search_id.clone())
+                        .on_clear(Message::SearchExpand)
+                        .on_input(Message::SearchInput)
+                        .into(),
+                );
+            }
+        // } else {
+        //     elements.push(
+        //         widget::button::icon(icon::from_name("system-search-symbolic"))
+        //             .on_press(Message::SearchActivate)
+        //             .padding(8)
+        //             .into(),
+        //     );
+        // }
+
+        elements
     }
 
     /// This is the main view of your application, it is the root of your widget tree.
@@ -791,6 +828,15 @@ impl Application for Jams {
                 //
                 //     self.error_status = Some(string);
                 // }
+            }
+
+
+            Message::SearchExpand => {
+                println!("This doesn't do anything right now.");
+            }
+
+            Message::SearchInput(term) => {
+                println!("{}", term);
             }
 
             Message::Cancelled => {}
