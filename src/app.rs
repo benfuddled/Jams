@@ -59,6 +59,8 @@ pub struct Jams {
     seek_position: Duration,
     last_tick: Instant,
     scrub_value: u8,
+    search_expanded: bool,
+    search_term: String,
 }
 
 pub struct GStreamerPlayer {
@@ -123,7 +125,10 @@ pub enum Message {
     Scrub(u8),
     SkipNext,
     SkipPrev,
+    SearchExpand,
+    SearchInput(String),
     DebugStub,
+    SearchMinimize,
 }
 
 /// Identifies a page in the application.
@@ -261,6 +266,8 @@ impl Application for Jams {
             current_track_duration: Duration::default(),
             seek_position: Duration::default(),
             last_tick: Instant::now(),
+            search_expanded: false,
+            search_term: "".to_string(),
         };
 
         let command = app.update_titles();
@@ -294,6 +301,32 @@ impl Application for Jams {
         vec![menu_bar.into()]
     }
 
+    fn header_end(&self) -> Vec<Element<Self::Message>> {
+        let mut elements = Vec::with_capacity(1);
+
+        if self.search_expanded {
+            elements.push(
+                widget::text_input::search_input("Search", &self.search_term)
+                    .width(Length::Fixed(240.0))
+                    .on_clear(Message::SearchMinimize)
+                    .always_active()
+                    //.id(self.search_id.clone())
+                    .on_input(Message::SearchInput)
+                    .into(),
+            );
+        } else {
+            elements.push(
+                widget::button::icon(icon::from_name("system-search-symbolic"))
+                    .on_press(Message::SearchExpand)
+                    .padding(8)
+                    .selected(true)
+                    .into(),
+            );
+        }
+
+        elements
+    }
+
     /// This is the main view of your application, it is the root of your widget tree.
     ///
     /// The `Element` type is used to represent the visual elements of your application,
@@ -310,46 +343,67 @@ impl Application for Jams {
             let mut file_col = Column::new().spacing(2);
 
             for file in &self.scanned_files {
-                let mut file_txt_row = Row::new()
-                    .align_y(Alignment::Center)
-                    .spacing(8)
-                    .padding([6, 4, 6, 4]);
+                if self.search_term.is_empty()
+                    || file
+                        .album
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                    || file
+                        .artist
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                    || file
+                        .track_title
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                    || file
+                        .album_artist
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                {
+                    let mut file_txt_row = Row::new()
+                        .align_y(Alignment::Center)
+                        .spacing(8)
+                        .padding([6, 4, 6, 4]);
 
-                let track_number = text(file.track_number.to_string()).align_x(Horizontal::Center).width(Length::FillPortion(1));
-                file_txt_row = file_txt_row.push(track_number);
+                    let track_number = text(file.track_number.to_string())
+                        .align_x(Horizontal::Center)
+                        .width(Length::FillPortion(1));
+                    file_txt_row = file_txt_row.push(track_number);
 
-                if file.paused == true {
-                    //let resume_txt = text("Resume");
-                    let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .on_press(Message::ResumeCurrentTrack);
-                    file_txt_row = file_txt_row.push(button);
-                } else if file.playing == true {
-                    //let playing_txt = text("Pause");
-                    let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
-                        .on_press(Message::PauseCurrentTrack);
-                    file_txt_row = file_txt_row.push(button);
-                } else {
-                    //let paused_txt = text("Play");
-                    let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
-                    file_txt_row = file_txt_row.push(button);
+                    if file.paused == true {
+                        //let resume_txt = text("Resume");
+                        let button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                            .on_press(Message::ResumeCurrentTrack);
+                        file_txt_row = file_txt_row.push(button);
+                    } else if file.playing == true {
+                        //let playing_txt = text("Pause");
+                        let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
+                            .on_press(Message::PauseCurrentTrack);
+                        file_txt_row = file_txt_row.push(button);
+                    } else {
+                        //let paused_txt = text("Play");
+                        let button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                            .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
+                        file_txt_row = file_txt_row.push(button);
+                    }
+
+                    let title = text(file.track_title.clone()).width(Length::FillPortion(40));
+                    let artist = text(file.artist.clone()).width(Length::FillPortion(20));
+                    let album = text(file.album.clone()).width(Length::FillPortion(20));
+                    file_txt_row = file_txt_row.push(title);
+                    file_txt_row = file_txt_row.push(artist);
+                    file_txt_row = file_txt_row.push(album);
+
+                    file_col = file_col.push(file_txt_row);
+
+                    file_col = file_col.push(widget::divider::horizontal::default());
+
+                    // let file_txt = text(file.saved_path.display().to_string());
+                    // let file_txt_container = Container::new(file_txt).width(Length::Fill);
+                    //
+                    // col = col.push(file_txt_container);
                 }
-
-                let title = text(file.track_title.clone()).width(Length::FillPortion(40));
-                let artist = text(file.artist.clone()).width(Length::FillPortion(20));
-                let album = text(file.album.clone()).width(Length::FillPortion(20));
-                file_txt_row = file_txt_row.push(title);
-                file_txt_row = file_txt_row.push(artist);
-                file_txt_row = file_txt_row.push(album);
-
-                file_col = file_col.push(file_txt_row);
-
-                file_col = file_col.push(widget::divider::horizontal::default());
-
-                // let file_txt = text(file.saved_path.display().to_string());
-                // let file_txt_container = Container::new(file_txt).width(Length::Fill);
-                //
-                // col = col.push(file_txt_container);
             }
 
             let scroll_list = Scrollable::new(file_col)
@@ -678,7 +732,10 @@ impl Application for Jams {
                                 };
 
                                 if let Some(tag) = tagged_file.primary_tag() {
-                                    let track_title = match tag.get_string(&ItemKey::TrackTitle).map(|s| s.to_string()) {
+                                    let track_title = match tag
+                                        .get_string(&ItemKey::TrackTitle)
+                                        .map(|s| s.to_string())
+                                    {
                                         Some(title) => title,
                                         None => {
                                             // If there's no track tag, fall back to the file name.
@@ -686,8 +743,8 @@ impl Application for Jams {
                                                 Some(filename) => match filename.to_str() {
                                                     Some(filename) => filename.to_string(),
                                                     None => String::from(""),
-                                                }
-                                                None => String::from("")
+                                                },
+                                                None => String::from(""),
                                             }
                                         }
                                     };
@@ -695,7 +752,10 @@ impl Application for Jams {
                                         tag.album().map(|s| s.to_string()).unwrap_or_default();
                                     let artist =
                                         tag.artist().map(|s| s.to_string()).unwrap_or_default();
-                                    let album_artist = match tag.get_string(&ItemKey::AlbumArtist).map(|s| s.to_string()) {
+                                    let album_artist = match tag
+                                        .get_string(&ItemKey::AlbumArtist)
+                                        .map(|s| s.to_string())
+                                    {
                                         Some(album_artist) => album_artist,
                                         None => artist.clone(),
                                     };
@@ -791,6 +851,19 @@ impl Application for Jams {
                 //
                 //     self.error_status = Some(string);
                 // }
+            }
+
+            Message::SearchExpand => {
+                self.search_expanded = true;
+            }
+
+            Message::SearchMinimize => {
+                self.search_term = "".to_string();
+                self.search_expanded = false;
+            }
+
+            Message::SearchInput(term) => {
+                self.search_term = term;
             }
 
             Message::Cancelled => {}

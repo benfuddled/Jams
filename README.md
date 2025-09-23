@@ -10,7 +10,7 @@ A music player for the COSMIC desktop that you might want to use some day.
 - [x] Pause/Resume
 - [x] Seek
 - [ ] Persistent library
-- [ ] Search
+- [x] Search
 - [ ] Sorting
 - [ ] Shuffle
 - [ ] Repeat/Repeat one
