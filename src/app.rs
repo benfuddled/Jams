@@ -53,6 +53,7 @@ pub struct Jams {
     nav: nav_bar::Model,
     /// A vector that contains the list of scanned files
     scanned_files: Vec<MusicFile>,
+    albums: Vec<Album>,
     audio_player: GStreamerPlayer,
     global_play_state: PlayState,
     current_track_duration: Duration,
@@ -83,6 +84,14 @@ pub struct MusicFile {
     uri: String,
     playing: bool,
     paused: bool,
+    id: usize,
+}
+
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Album {
+    album_artist: String,
+    album: String,
+    tracks: Vec<usize>, // TODO: refactor to use arc
 }
 
 // TODO: MAKE THESE SOME()
@@ -100,6 +109,7 @@ impl Default for MusicFile {
             album: "Invalid Album".to_string(),
             album_artist: "Invalid Album Artist".to_string(),
             date: "Invalid Date".to_string(),
+            id: 0,
         }
     }
 }
@@ -241,6 +251,7 @@ impl Application for Jams {
             .icon(icon_cache_get("music-artist-symbolic", 16));
 
         let scanned_files = vec![];
+        let albums = vec![];
 
         gst::init().expect("Could not initialize GStreamer.");
 
@@ -260,6 +271,7 @@ impl Application for Jams {
             key_binds: HashMap::new(),
             nav,
             scanned_files,
+            albums,
             audio_player,
             global_play_state,
             scrub_value: 50,
@@ -335,86 +347,16 @@ impl Application for Jams {
     /// To get a better sense of which widgets are available, check out the `widget` module.
     fn view(&self) -> Element<Self::Message> {
         // self.nav.text() - pass it a nav item from the model to get its text
-        // self.nav.active() - get currently active nav
+        println!("{:?}", self.nav.active());// - get currently active nav
+        // println!("{:?}", self
+        //     .nav
+        //     .active_data::<String>()
+        //     .map_or("No page selected", String::as_str));
+        println!("{:?}", self.nav.text(self.nav.active()));
         let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         if &self.scanned_files.len() > &0 {
-            let mut file_col = Column::new().spacing(2);
-
-            for file in &self.scanned_files {
-                if self.search_term.is_empty()
-                    || file
-                        .album
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
-                    || file
-                        .artist
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
-                    || file
-                        .track_title
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
-                    || file
-                        .album_artist
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
-                {
-                    let mut file_txt_row = Row::new()
-                        .align_y(Alignment::Center)
-                        .spacing(8)
-                        .padding([6, 4, 6, 4]);
-
-                    let track_number = text(file.track_number.to_string())
-                        .align_x(Horizontal::Center)
-                        .width(Length::FillPortion(1));
-                    file_txt_row = file_txt_row.push(track_number);
-
-                    if file.paused == true {
-                        //let resume_txt = text("Resume");
-                        let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                            .on_press(Message::ResumeCurrentTrack);
-                        file_txt_row = file_txt_row.push(button);
-                    } else if file.playing == true {
-                        //let playing_txt = text("Pause");
-                        let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
-                            .on_press(Message::PauseCurrentTrack);
-                        file_txt_row = file_txt_row.push(button);
-                    } else {
-                        //let paused_txt = text("Play");
-                        let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                            .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
-                        file_txt_row = file_txt_row.push(button);
-                    }
-
-                    let title = text(file.track_title.clone()).width(Length::FillPortion(40));
-                    let artist = text(file.artist.clone()).width(Length::FillPortion(20));
-                    let album = text(file.album.clone()).width(Length::FillPortion(20));
-                    file_txt_row = file_txt_row.push(title);
-                    file_txt_row = file_txt_row.push(artist);
-                    file_txt_row = file_txt_row.push(album);
-
-                    file_col = file_col.push(file_txt_row);
-
-                    file_col = file_col.push(widget::divider::horizontal::default());
-
-                    // let file_txt = text(file.saved_path.display().to_string());
-                    // let file_txt_container = Container::new(file_txt).width(Length::Fill);
-                    //
-                    // col = col.push(file_txt_container);
-                }
-            }
-
-            let scroll_list = Scrollable::new(file_col)
-                .height(Length::Fill)
-                .width(Length::Fill);
-            let scroll_container = Container::new(scroll_list)
-                .height(Length::Fill)
-                .width(Length::Fill);
-
-            // let paused_txt = text("Play");
-            // let button = button(paused_txt);
 
             let mut controls_row = Row::new()
                 .spacing(10)
@@ -509,7 +451,122 @@ impl Application for Jams {
             let controls_container =
                 Container::new(controls_col).class(cosmic::style::Container::ContextDrawer);
 
-            window_col = window_col.push(scroll_container);
+            // TODO: Improve performance when rendering pages (specifically switching between them)
+            if self.nav.text(self.nav.active()) == Option::from("All Music") {
+                let mut file_col = Column::new().spacing(2);
+
+                for file in &self.scanned_files {
+                    if self.search_term.is_empty()
+                        || file
+                        .album
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                        || file
+                        .artist
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                        || file
+                        .track_title
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                        || file
+                        .album_artist
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                    {
+                        let mut file_txt_row = Row::new()
+                            .align_y(Alignment::Center)
+                            .spacing(8)
+                            .padding([6, 4, 6, 4]);
+
+                        let track_number = text(file.track_number.to_string())
+                            .align_x(Horizontal::Center)
+                            .width(Length::FillPortion(1));
+                        file_txt_row = file_txt_row.push(track_number);
+
+                        if file.paused == true {
+                            //let resume_txt = text("Resume");
+                            let button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                                .on_press(Message::ResumeCurrentTrack);
+                            file_txt_row = file_txt_row.push(button);
+                        } else if file.playing == true {
+                            //let playing_txt = text("Pause");
+                            let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
+                                .on_press(Message::PauseCurrentTrack);
+                            file_txt_row = file_txt_row.push(button);
+                        } else {
+                            //let paused_txt = text("Play");
+                            let button = button::icon(icon::from_name("media-playback-start-symbolic"))
+                                .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
+                            file_txt_row = file_txt_row.push(button);
+                        }
+
+                        let title = text(file.track_title.clone()).width(Length::FillPortion(40));
+                        let artist = text(file.artist.clone()).width(Length::FillPortion(20));
+                        let album = text(file.album.clone()).width(Length::FillPortion(20));
+                        file_txt_row = file_txt_row.push(title);
+                        file_txt_row = file_txt_row.push(artist);
+                        file_txt_row = file_txt_row.push(album);
+
+                        file_col = file_col.push(file_txt_row);
+
+                        file_col = file_col.push(widget::divider::horizontal::default());
+
+                        // let file_txt = text(file.saved_path.display().to_string());
+                        // let file_txt_container = Container::new(file_txt).width(Length::Fill);
+                        //
+                        // col = col.push(file_txt_container);
+                    }
+                }
+
+                let scroll_list = Scrollable::new(file_col)
+                    .height(Length::Fill)
+                    .width(Length::Fill);
+                let scroll_container = Container::new(scroll_list)
+                    .height(Length::Fill)
+                    .width(Length::Fill);
+
+                // let paused_txt = text("Play");
+                // let button = button(paused_txt);
+
+                window_col = window_col.push(scroll_container);
+            } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
+                let mut file_col= Column::new().spacing(2);
+
+                for album in &self.albums {
+                    if self.search_term.is_empty()
+                        || album
+                        .album
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                        || album
+                        .album_artist
+                        .to_lowercase()
+                        .contains(&self.search_term.to_lowercase())
+                    {
+                        let mut file_txt_row = Row::new()
+                            .align_y(Alignment::Center)
+                            .spacing(8)
+                            .padding([6, 4, 6, 4]);
+
+                        let album = text(album.album.clone()).width(Length::FillPortion(20));
+                        file_txt_row = file_txt_row.push(album);
+
+                        file_col = file_col.push(file_txt_row);
+
+                        file_col = file_col.push(widget::divider::horizontal::default());
+                    }
+                }
+
+                let scroll_list = Scrollable::new(file_col)
+                    .height(Length::Fill)
+                    .width(Length::Fill);
+                let scroll_container = Container::new(scroll_list)
+                    .height(Length::Fill)
+                    .width(Length::Fill);
+
+                window_col = window_col.push(scroll_container);
+            }
             window_col = window_col.push(controls_container);
         } else {
             let mut splash_screen = Column::new().align_x(Alignment::Center).spacing(15);
@@ -711,88 +768,111 @@ impl Application for Jams {
             }
 
             Message::AddSongsToLibrary(url) => {
-                for entry in WalkDir::new(url.to_file_path().unwrap())
-                    .into_iter()
-                    .filter_map(|e| e.ok())
-                {
-                    let is_audio = is_audio_file(entry.path()).unwrap_or_else(|_| false);
+                // for entry in WalkDir::new(url.to_file_path().unwrap())
+                //     .into_iter()
+                //     .filter_map(|e| e.ok())
+                // {
+                for (index, entry) in WalkDir::new(url.to_file_path().unwrap()).into_iter().enumerate() {
+                    match entry {
+                        Ok(entry) => {
+                            let is_audio = is_audio_file(entry.path()).unwrap_or_else(|_| false);
 
-                    if entry.file_type().is_file() && is_audio {
-                        let saved_path = entry.clone().into_path();
-                        println!("{}", entry.path().display());
-                        match Url::from_file_path(entry.clone().into_path()) {
-                            Ok(url) => {
-                                let tagged_file = match lofty::read_from_path(entry.clone().path())
-                                {
-                                    Ok(file) => file,
-                                    Err(err) => {
-                                        eprintln!("Error reading file: {}", err);
-                                        continue;
-                                    }
-                                };
-
-                                if let Some(tag) = tagged_file.primary_tag() {
-                                    let track_title = match tag
-                                        .get_string(&ItemKey::TrackTitle)
-                                        .map(|s| s.to_string())
-                                    {
-                                        Some(title) => title,
-                                        None => {
-                                            // If there's no track tag, fall back to the file name.
-                                            match entry.path().file_name() {
-                                                Some(filename) => match filename.to_str() {
-                                                    Some(filename) => filename.to_string(),
-                                                    None => String::from(""),
-                                                },
-                                                None => String::from(""),
+                            if entry.file_type().is_file() && is_audio {
+                                let saved_path = entry.clone().into_path();
+                                println!("{}", entry.path().display());
+                                match Url::from_file_path(entry.clone().into_path()) {
+                                    Ok(url) => {
+                                        let tagged_file = match lofty::read_from_path(entry.clone().path())
+                                        {
+                                            Ok(file) => file,
+                                            Err(err) => {
+                                                eprintln!("Error reading file: {}", err);
+                                                continue;
                                             }
-                                        }
-                                    };
-                                    let album =
-                                        tag.album().map(|s| s.to_string()).unwrap_or_default();
-                                    let artist =
-                                        tag.artist().map(|s| s.to_string()).unwrap_or_default();
-                                    let album_artist = match tag
-                                        .get_string(&ItemKey::AlbumArtist)
-                                        .map(|s| s.to_string())
-                                    {
-                                        Some(album_artist) => album_artist,
-                                        None => artist.clone(),
-                                    };
-                                    let date =
-                                        tag.year().map(|s| s.to_string()).unwrap_or_default();
-                                    let track_number = match tag.track().map(|s| s.to_string()) {
-                                        Some(track) => track.parse::<u16>().unwrap_or(0),
-                                        None => 0,
-                                    };
+                                        };
 
-                                    let properties =
-                                        lofty::prelude::AudioFile::properties(&tagged_file);
-                                    let duration =
-                                        Duration::from_secs(properties.duration().as_secs());
+                                        if let Some(tag) = tagged_file.primary_tag() {
+                                            let track_title = match tag
+                                                .get_string(&ItemKey::TrackTitle)
+                                                .map(|s| s.to_string())
+                                            {
+                                                Some(title) => title,
+                                                None => {
+                                                    // If there's no track tag, fall back to the file name.
+                                                    match entry.path().file_name() {
+                                                        Some(filename) => match filename.to_str() {
+                                                            Some(filename) => filename.to_string(),
+                                                            None => String::from(""),
+                                                        },
+                                                        None => String::from(""),
+                                                    }
+                                                }
+                                            };
+                                            let album =
+                                                tag.album().map(|s| s.to_string()).unwrap_or_default();
+                                            let artist =
+                                                tag.artist().map(|s| s.to_string()).unwrap_or_default();
+                                            let album_artist = match tag
+                                                .get_string(&ItemKey::AlbumArtist)
+                                                .map(|s| s.to_string())
+                                            {
+                                                Some(album_artist) => album_artist,
+                                                None => artist.clone(),
+                                            };
+                                            let date =
+                                                tag.year().map(|s| s.to_string()).unwrap_or_default();
+                                            let track_number = match tag.track().map(|s| s.to_string()) {
+                                                Some(track) => track.parse::<u16>().unwrap_or(0),
+                                                None => 0,
+                                            };
 
-                                    let music_file = MusicFile {
-                                        album_artist,
-                                        album,
-                                        track_number,
-                                        artist,
-                                        track_title,
-                                        duration,
-                                        date,
-                                        saved_path: saved_path.clone(),
-                                        uri: url.to_string(),
-                                        //metadata,
-                                        playing: false,
-                                        paused: false,
-                                    };
+                                            let properties =
+                                                lofty::prelude::AudioFile::properties(&tagged_file);
+                                            let duration =
+                                                Duration::from_secs(properties.duration().as_secs());
 
-                                    self.scanned_files.push(music_file);
-                                } else {
-                                    println!("No tags found in file");
-                                    continue;
-                                };
+                                            let music_file = MusicFile {
+                                                album_artist: album_artist.clone(),
+                                                album: album.clone(),
+                                                track_number,
+                                                artist,
+                                                track_title,
+                                                duration,
+                                                date,
+                                                saved_path: saved_path.clone(),
+                                                uri: url.to_string(),
+                                                //metadata,
+                                                playing: false,
+                                                paused: false,
+                                                id: index,
+                                            };
+
+                                            match self.albums.iter_mut().find(|album| album.album == music_file.album && album.album_artist == music_file.album_artist) {
+                                                Some(album) => {
+                                                    album.tracks.push(index);
+                                                },
+                                                None => {
+                                                    let new_album = Album {
+                                                        album_artist: album_artist.clone(),
+                                                        album: album.clone(),
+                                                        tracks: vec![index],
+                                                    };
+                                                    self.albums.push(new_album);
+                                                }
+                                            }
+
+                                            self.scanned_files.push(music_file);
+                                        } else {
+                                            println!("No tags found in file");
+                                            continue;
+                                        };
+                                    }
+                                    Err(err) => eprintln!("Failed to run discovery: {err:?}"),
+                                }
                             }
-                            Err(err) => eprintln!("Failed to run discovery: {err:?}"),
+                        }
+                        Err(entry_error) => {
+                            println!("URL {} could not be read", url);
                         }
                     }
                 }
