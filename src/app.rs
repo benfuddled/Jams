@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use std::cell::RefCell;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
-use cosmic::widget::{self, button, icon, menu, nav_bar, slider, text, Column, Container, Row};
+use cosmic::iced::{keyboard, time, Alignment, ContentFit, Length, Subscription};
+use cosmic::widget::{self, button, icon, image, menu, nav_bar, slider, text, Column, Container, Row};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use lofty::prelude::{Accessor, TaggedFileExt};
 use lofty::tag::ItemKey;
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -28,6 +31,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::{glib, ClockTime};
 use gstreamer_play as gst_play;
+use lofty::picture::Picture;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 
@@ -87,10 +91,11 @@ pub struct MusicFile {
     id: usize,
 }
 
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Album {
     album_artist: String,
     album: String,
+    cached_cover_path: String,
     tracks: Vec<usize>, // TODO: refactor to use arc
 }
 
@@ -347,17 +352,16 @@ impl Application for Jams {
     /// To get a better sense of which widgets are available, check out the `widget` module.
     fn view(&self) -> Element<Self::Message> {
         // self.nav.text() - pass it a nav item from the model to get its text
-        println!("{:?}", self.nav.active());// - get currently active nav
-        // println!("{:?}", self
-        //     .nav
-        //     .active_data::<String>()
-        //     .map_or("No page selected", String::as_str));
+        println!("{:?}", self.nav.active()); // - get currently active nav
+                                             // println!("{:?}", self
+                                             //     .nav
+                                             //     .active_data::<String>()
+                                             //     .map_or("No page selected", String::as_str));
         println!("{:?}", self.nav.text(self.nav.active()));
         let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
         if &self.scanned_files.len() > &0 {
-
             let mut controls_row = Row::new()
                 .spacing(10)
                 .align_y(Alignment::Center)
@@ -458,21 +462,21 @@ impl Application for Jams {
                 for file in &self.scanned_files {
                     if self.search_term.is_empty()
                         || file
-                        .album
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
+                            .album
+                            .to_lowercase()
+                            .contains(&self.search_term.to_lowercase())
                         || file
-                        .artist
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
+                            .artist
+                            .to_lowercase()
+                            .contains(&self.search_term.to_lowercase())
                         || file
-                        .track_title
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
+                            .track_title
+                            .to_lowercase()
+                            .contains(&self.search_term.to_lowercase())
                         || file
-                        .album_artist
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
+                            .album_artist
+                            .to_lowercase()
+                            .contains(&self.search_term.to_lowercase())
                     {
                         let mut file_txt_row = Row::new()
                             .align_y(Alignment::Center)
@@ -486,18 +490,21 @@ impl Application for Jams {
 
                         if file.paused == true {
                             //let resume_txt = text("Resume");
-                            let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                                .on_press(Message::ResumeCurrentTrack);
+                            let button =
+                                button::icon(icon::from_name("media-playback-start-symbolic"))
+                                    .on_press(Message::ResumeCurrentTrack);
                             file_txt_row = file_txt_row.push(button);
                         } else if file.playing == true {
                             //let playing_txt = text("Pause");
-                            let button = button::icon(icon::from_name("media-playback-pause-symbolic"))
-                                .on_press(Message::PauseCurrentTrack);
+                            let button =
+                                button::icon(icon::from_name("media-playback-pause-symbolic"))
+                                    .on_press(Message::PauseCurrentTrack);
                             file_txt_row = file_txt_row.push(button);
                         } else {
                             //let paused_txt = text("Play");
-                            let button = button::icon(icon::from_name("media-playback-start-symbolic"))
-                                .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
+                            let button =
+                                button::icon(icon::from_name("media-playback-start-symbolic"))
+                                    .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
                             file_txt_row = file_txt_row.push(button);
                         }
 
@@ -531,25 +538,31 @@ impl Application for Jams {
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
-                let mut file_col= Column::new().spacing(2);
+                let mut file_col = Column::new().spacing(2);
 
                 for album in &self.albums {
                     if self.search_term.is_empty()
                         || album
-                        .album
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
+                            .album
+                            .to_lowercase()
+                            .contains(&self.search_term.to_lowercase())
                         || album
-                        .album_artist
-                        .to_lowercase()
-                        .contains(&self.search_term.to_lowercase())
+                            .album_artist
+                            .to_lowercase()
+                            .contains(&self.search_term.to_lowercase())
                     {
                         let mut file_txt_row = Row::new()
                             .align_y(Alignment::Center)
                             .spacing(8)
                             .padding([6, 4, 6, 4]);
 
+                        // let cover = &album.cover;
+                        //
+
+                        let graphic = image(album.cached_cover_path.clone()).width(Length::Fixed(50.0)).height(Length::Fixed(50.0)).content_fit(ContentFit::Contain);
+
                         let album = text(album.album.clone()).width(Length::FillPortion(20));
+                        file_txt_row = file_txt_row.push(graphic);
                         file_txt_row = file_txt_row.push(album);
 
                         file_col = file_col.push(file_txt_row);
@@ -772,7 +785,10 @@ impl Application for Jams {
                 //     .into_iter()
                 //     .filter_map(|e| e.ok())
                 // {
-                for (index, entry) in WalkDir::new(url.to_file_path().unwrap()).into_iter().enumerate() {
+                for (index, entry) in WalkDir::new(url.to_file_path().unwrap())
+                    .into_iter()
+                    .enumerate()
+                {
                     match entry {
                         Ok(entry) => {
                             let is_audio = is_audio_file(entry.path()).unwrap_or_else(|_| false);
@@ -782,14 +798,14 @@ impl Application for Jams {
                                 println!("{}", entry.path().display());
                                 match Url::from_file_path(entry.clone().into_path()) {
                                     Ok(url) => {
-                                        let tagged_file = match lofty::read_from_path(entry.clone().path())
-                                        {
-                                            Ok(file) => file,
-                                            Err(err) => {
-                                                eprintln!("Error reading file: {}", err);
-                                                continue;
-                                            }
-                                        };
+                                        let tagged_file =
+                                            match lofty::read_from_path(entry.clone().path()) {
+                                                Ok(file) => file,
+                                                Err(err) => {
+                                                    eprintln!("Error reading file: {}", err);
+                                                    continue;
+                                                }
+                                            };
 
                                         if let Some(tag) = tagged_file.primary_tag() {
                                             let track_title = match tag
@@ -808,10 +824,14 @@ impl Application for Jams {
                                                     }
                                                 }
                                             };
-                                            let album =
-                                                tag.album().map(|s| s.to_string()).unwrap_or_default();
-                                            let artist =
-                                                tag.artist().map(|s| s.to_string()).unwrap_or_default();
+                                            let album = tag
+                                                .album()
+                                                .map(|s| s.to_string())
+                                                .unwrap_or_default();
+                                            let artist = tag
+                                                .artist()
+                                                .map(|s| s.to_string())
+                                                .unwrap_or_default();
                                             let album_artist = match tag
                                                 .get_string(&ItemKey::AlbumArtist)
                                                 .map(|s| s.to_string())
@@ -819,17 +839,29 @@ impl Application for Jams {
                                                 Some(album_artist) => album_artist,
                                                 None => artist.clone(),
                                             };
-                                            let date =
-                                                tag.year().map(|s| s.to_string()).unwrap_or_default();
-                                            let track_number = match tag.track().map(|s| s.to_string()) {
+                                            let date = tag
+                                                .year()
+                                                .map(|s| s.to_string())
+                                                .unwrap_or_default();
+                                            let track_number = match tag
+                                                .track()
+                                                .map(|s| s.to_string())
+                                            {
                                                 Some(track) => track.parse::<u16>().unwrap_or(0),
                                                 None => 0,
                                             };
 
                                             let properties =
                                                 lofty::prelude::AudioFile::properties(&tagged_file);
-                                            let duration =
-                                                Duration::from_secs(properties.duration().as_secs());
+                                            let duration = Duration::from_secs(
+                                                properties.duration().as_secs(),
+                                            );
+
+                                            // println!("{}", tag.picture_count());
+                                            // let thing = tag.pictures();
+                                            // for pic in tag.pictures() {
+                                            //     println!("{:?}", pic.pic_type());
+                                            // }
 
                                             let music_file = MusicFile {
                                                 album_artist: album_artist.clone(),
@@ -847,14 +879,38 @@ impl Application for Jams {
                                                 id: index,
                                             };
 
-                                            match self.albums.iter_mut().find(|album| album.album == music_file.album && album.album_artist == music_file.album_artist) {
+                                            match self.albums.iter_mut().find(|album| {
+                                                album.album == music_file.album
+                                                    && album.album_artist == music_file.album_artist
+                                            }) {
                                                 Some(album) => {
                                                     album.tracks.push(index);
-                                                },
+                                                }
                                                 None => {
+
+                                                    let path_to_write = "/home/ben/.local/share/jams/covers/".to_string() + index.to_string().as_str();
+
+                                                    match tag.pictures().first() {
+                                                        None => {}
+                                                        Some(picture) => {
+                                                            let data = picture.data();
+
+                                                            fs::create_dir_all("/home/ben/.local/share/jams/covers/").expect("TODO: panic message");
+
+                                                            let mut file = fs::OpenOptions::new()
+                                                                .create(true) // To create a new file
+                                                                .write(true)
+                                                                // either use the ? operator or unwrap since it returns a Result
+                                                                .open(path_to_write.clone()).unwrap();
+
+                                                            file.write_all(&data).unwrap();
+                                                        }
+                                                    }
+
                                                     let new_album = Album {
                                                         album_artist: album_artist.clone(),
                                                         album: album.clone(),
+                                                        cached_cover_path: path_to_write.clone(),
                                                         tracks: vec![index],
                                                     };
                                                     self.albums.push(new_album);
