@@ -4,8 +4,8 @@ use std::cell::RefCell;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{keyboard, time, Alignment, ContentFit, Length, Subscription};
-use cosmic::widget::{self, button, icon, image, menu, nav_bar, slider, text, Column, Container, Row};
+use cosmic::iced::{alignment, keyboard, time, Alignment, ContentFit, Length, Subscription};
+use cosmic::widget::{self, button, icon, image, menu, nav_bar, slider, text, Column, Container, FlexRow, Grid, Row};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use lofty::prelude::{Accessor, TaggedFileExt};
 use lofty::tag::ItemKey;
@@ -538,7 +538,8 @@ impl Application for Jams {
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
-                let mut file_col = Column::new().spacing(2);
+
+                let mut list_of_albums = Row::new().width(Length::Fill).align_y(Alignment::Center);
 
                 for album in &self.albums {
                     if self.search_term.is_empty()
@@ -551,27 +552,26 @@ impl Application for Jams {
                             .to_lowercase()
                             .contains(&self.search_term.to_lowercase())
                     {
-                        let mut file_txt_row = Row::new()
-                            .align_y(Alignment::Center)
+                        let mut album_block = Column::new()
+                            .align_x(Alignment::Center)
+                            .width(Length::Fill)
+                            .max_width(300)
                             .spacing(8)
                             .padding([6, 4, 6, 4]);
 
-                        // let cover = &album.cover;
-                        //
+                        let album_front_cover = image(album.cached_cover_path.clone()).width(Length::Fixed(270.0)).height(Length::Fixed(270.0)).content_fit(ContentFit::Contain);
+                        let album_name = text(album.album.clone()).width(Length::Fill).align_x(Alignment::Center);
 
-                        let graphic = image(album.cached_cover_path.clone()).width(Length::Fixed(50.0)).height(Length::Fixed(50.0)).content_fit(ContentFit::Contain);
+                        album_block = album_block.push(album_front_cover);
+                        album_block = album_block.push(album_name);
 
-                        let album = text(album.album.clone()).width(Length::FillPortion(20));
-                        file_txt_row = file_txt_row.push(graphic);
-                        file_txt_row = file_txt_row.push(album);
-
-                        file_col = file_col.push(file_txt_row);
-
-                        file_col = file_col.push(widget::divider::horizontal::default());
+                        list_of_albums = list_of_albums.push(album_block);
                     }
                 }
 
-                let scroll_list = Scrollable::new(file_col)
+                let list_of_albums_wrapped = list_of_albums.wrap();
+
+                let scroll_list = Scrollable::new(list_of_albums_wrapped)
                     .height(Length::Fill)
                     .width(Length::Fill);
                 let scroll_container = Container::new(scroll_list)
@@ -827,7 +827,7 @@ impl Application for Jams {
                                             let album = tag
                                                 .album()
                                                 .map(|s| s.to_string())
-                                                .unwrap_or_default();
+                                                .unwrap_or_else(|| String::from("Unknown Album"));
                                             let artist = tag
                                                 .artist()
                                                 .map(|s| s.to_string())
@@ -888,14 +888,14 @@ impl Application for Jams {
                                                 }
                                                 None => {
 
-                                                    let path_to_write = "/home/ben/.local/share/jams/covers/".to_string() + index.to_string().as_str();
+                                                    let path_to_write = "~/.local/share/jams/covers/".to_string() + index.to_string().as_str();
 
                                                     match tag.pictures().first() {
                                                         None => {}
                                                         Some(picture) => {
                                                             let data = picture.data();
 
-                                                            fs::create_dir_all("/home/ben/.local/share/jams/covers/").expect("TODO: panic message");
+                                                            fs::create_dir_all("~/.local/share/jams/covers/").expect("TODO: panic message");
 
                                                             let mut file = fs::OpenOptions::new()
                                                                 .create(true) // To create a new file
