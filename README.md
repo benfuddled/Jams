@@ -1,8 +1,8 @@
+> **⚠️ Early Development**: Jams is under active development and not intended for daily use. Expect many blank screens and rough edges.
+
 # Jams (formerly YAMP)
 
 A music player for the COSMIC desktop that you might want to use some day.
-
-> **⚠️ Early Development**: Jams is under active development and not intended for daily use. Expect many rough edges and TODOs.
 
 ![image](https://github.com/user-attachments/assets/e37171aa-6e77-468a-94bc-607f486bad45)
 
