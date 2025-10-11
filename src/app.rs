@@ -552,18 +552,23 @@ impl Application for Jams {
                             .to_lowercase()
                             .contains(&self.search_term.to_lowercase())
                     {
-                        let mut album_block = Column::new()
-                            .align_x(Alignment::Center)
-                            .width(Length::Fill)
-                            .max_width(300)
-                            .spacing(8)
-                            .padding([6, 4, 6, 4]);
+                        let mut album_content = Column::new();
 
                         let album_front_cover = image(album.cached_cover_path.clone()).width(Length::Fixed(270.0)).height(Length::Fixed(270.0)).content_fit(ContentFit::Contain);
                         let album_name = text(album.album.clone()).width(Length::Fill).align_x(Alignment::Center);
 
-                        album_block = album_block.push(album_front_cover);
-                        album_block = album_block.push(album_name);
+                        album_content = album_content.push(album_front_cover);
+                        album_content = album_content.push(album_name);
+
+                        let mut album_content_alignment = Row::new().align_y(Alignment::Start);
+                        album_content_alignment = album_content_alignment.push(album_content);
+
+                        let mut album_block = Column::new()
+                            .width(Length::Fill)
+                            .max_width(300)
+                            .spacing(8)
+                            .padding([6, 4, 6, 4]);
+                        album_block = album_block.push(album_content_alignment);
 
                         list_of_albums = list_of_albums.push(album_block);
                     }
