@@ -144,6 +144,8 @@ pub enum Message {
     SearchInput(String),
     DebugStub,
     SearchMinimize,
+    SaveLibraryLocation,
+    ResetLibraryLocation,
 }
 
 /// Identifies a page in the application.
@@ -181,6 +183,9 @@ impl ContextPage {
 pub enum MenuAction {
     About,
     DebugStub,
+    SaveLibraryLocation,
+    ResetLibraryLocation,
+    ReOpenLibraryLocation,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -190,7 +195,31 @@ impl menu::action::MenuAction for MenuAction {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
             MenuAction::DebugStub => Message::DebugStub,
-        }
+            MenuAction::SaveLibraryLocation => Message::SaveLibraryLocation,
+            MenuAction::ResetLibraryLocation => Message::ResetLibraryLocation,
+            MenuAction::ReOpenLibraryLocation => match fs::read_to_string("~/.config/jams/locations") {
+                    Ok(contents) => {
+                        println!("Locations contents: {}", contents);
+                        let path = Path::new(contents.as_str());
+                        if path.exists() {
+                            match Url::from_file_path(path) {
+                                Ok(url) => Message::AddSongsToLibrary(url),
+                                Err(_) => {
+                                    println!("Failed to convert library path to URL");
+                                    Message::DebugStub
+                                }
+                            }
+                        } else {
+                            Message::DebugStub
+                        }
+                    }
+                    Err(_) => {
+                        println!("Failed to open library config.");
+                        Message::DebugStub
+                    }
+                }
+            }
+
     }
 }
 
@@ -310,6 +339,21 @@ impl Application for Jams {
                         fl!("debug"),
                         None,
                         MenuAction::DebugStub,
+                    ),
+                         menu::Item::Button(
+                             "Save Library Location".to_string(),
+                             None,
+                             MenuAction::SaveLibraryLocation,
+                         ),
+                    menu::Item::Button(
+                        "Reset Library Location".to_string(),
+                        None,
+                        MenuAction::ResetLibraryLocation,
+                    ),
+                    menu::Item::Button(
+                        "Re-Open Library Location".to_string(),
+                        None,
+                        MenuAction::ReOpenLibraryLocation,
                     )],
                 ),
             ),
@@ -1023,6 +1067,12 @@ impl Application for Jams {
             }
             Message::Scrub(value) => {
                 self.scrub(value);
+            }
+            Message::SaveLibraryLocation => {
+                println!("This doesn't do anything right now.");
+            }
+            Message::ResetLibraryLocation => {
+                println!("This doesn't do anything right now.");
             }
             Message::DebugStub => {
                 println!("This doesn't do anything right now.");
