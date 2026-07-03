@@ -11,7 +11,7 @@ A music player for the COSMIC desktop that you might want to use some day.
 - [x] Audio playback
 - [x] Pause/Resume
 - [x] Seek
-- [ ] Persistent library
+- [x] Persistent library
 - [x] Search
 - [ ] Sorting
 - [ ] Shuffle
