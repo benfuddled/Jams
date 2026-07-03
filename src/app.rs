@@ -34,7 +34,6 @@ use gstreamer_play as gst_play;
 use lofty::picture::Picture;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
-
 lazy_static::lazy_static! {
     static ref ICON_CACHE: Mutex<IconCache> = Mutex::new(IconCache::new());
 }
@@ -144,6 +143,9 @@ pub enum Message {
     SearchInput(String),
     DebugStub,
     SearchMinimize,
+    SaveLibraryLocation,
+    ResetLibraryLocation,
+    ReOpenLibraryLocation,
 }
 
 /// Identifies a page in the application.
@@ -181,6 +183,9 @@ impl ContextPage {
 pub enum MenuAction {
     About,
     DebugStub,
+    SaveLibraryLocation,
+    ResetLibraryLocation,
+    ReOpenLibraryLocation,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -190,7 +195,11 @@ impl menu::action::MenuAction for MenuAction {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
             MenuAction::DebugStub => Message::DebugStub,
-        }
+            MenuAction::SaveLibraryLocation => Message::SaveLibraryLocation,
+            MenuAction::ResetLibraryLocation => Message::ResetLibraryLocation,
+            MenuAction::ReOpenLibraryLocation => Message::ReOpenLibraryLocation,
+            }
+
     }
 }
 
@@ -255,20 +264,29 @@ impl Application for Jams {
             .data::<Page>(Page::Page4)
             .icon(icon_cache_get("music-artist-symbolic", 16));
 
-        let scanned_files = vec![];
-        let albums = vec![];
+        let mut scanned_files = vec![];
+        let mut albums = vec![];
+
+        match get_loc_from_config() {
+            Ok(url) => {
+                get_all_files(url, &mut albums, &mut scanned_files);
+            }
+            Err(err_msg) => {
+                println!("{}", err_msg);
+            }
+        }
 
         gst::init().expect("Could not initialize GStreamer.");
 
         let play = gst_play::Play::new(None::<gst_play::PlayVideoRenderer>);
         let gst_content = Vec::new();
 
-        let mut audio_player = GStreamerPlayer {
+        let audio_player = GStreamerPlayer {
             player: play,
             content: gst_content,
         };
 
-        let mut global_play_state: PlayState = PlayState::default();
+        let global_play_state: PlayState = PlayState::default();
 
         let mut app = Jams {
             core,
@@ -310,6 +328,21 @@ impl Application for Jams {
                         fl!("debug"),
                         None,
                         MenuAction::DebugStub,
+                    ),
+                         menu::Item::Button(
+                             "Save Library Location".to_string(),
+                             None,
+                             MenuAction::SaveLibraryLocation,
+                         ),
+                    menu::Item::Button(
+                        "Reset Library Location".to_string(),
+                        None,
+                        MenuAction::ResetLibraryLocation,
+                    ),
+                    menu::Item::Button(
+                        "Re-Open Library Location".to_string(),
+                        None,
+                        MenuAction::ReOpenLibraryLocation,
                     )],
                 ),
             ),
@@ -786,161 +819,8 @@ impl Application for Jams {
             }
 
             Message::AddSongsToLibrary(url) => {
-                // for entry in WalkDir::new(url.to_file_path().unwrap())
-                //     .into_iter()
-                //     .filter_map(|e| e.ok())
-                // {
-                for (index, entry) in WalkDir::new(url.to_file_path().unwrap())
-                    .into_iter()
-                    .enumerate()
-                {
-                    match entry {
-                        Ok(entry) => {
-                            let is_audio = is_audio_file(entry.path()).unwrap_or_else(|_| false);
-
-                            if entry.file_type().is_file() && is_audio {
-                                let saved_path = entry.clone().into_path();
-                                println!("{}", entry.path().display());
-                                match Url::from_file_path(entry.clone().into_path()) {
-                                    Ok(url) => {
-                                        let tagged_file =
-                                            match lofty::read_from_path(entry.clone().path()) {
-                                                Ok(file) => file,
-                                                Err(err) => {
-                                                    eprintln!("Error reading file: {}", err);
-                                                    continue;
-                                                }
-                                            };
-
-                                        if let Some(tag) = tagged_file.primary_tag() {
-                                            let track_title = match tag
-                                                .get_string(&ItemKey::TrackTitle)
-                                                .map(|s| s.to_string())
-                                            {
-                                                Some(title) => title,
-                                                None => {
-                                                    // If there's no track tag, fall back to the file name.
-                                                    match entry.path().file_name() {
-                                                        Some(filename) => match filename.to_str() {
-                                                            Some(filename) => filename.to_string(),
-                                                            None => String::from(""),
-                                                        },
-                                                        None => String::from(""),
-                                                    }
-                                                }
-                                            };
-                                            let album = tag
-                                                .album()
-                                                .map(|s| s.to_string())
-                                                .unwrap_or_else(|| String::from("Unknown Album"));
-                                            let artist = tag
-                                                .artist()
-                                                .map(|s| s.to_string())
-                                                .unwrap_or_default();
-                                            let album_artist = match tag
-                                                .get_string(&ItemKey::AlbumArtist)
-                                                .map(|s| s.to_string())
-                                            {
-                                                Some(album_artist) => album_artist,
-                                                None => artist.clone(),
-                                            };
-                                            let date = tag
-                                                .year()
-                                                .map(|s| s.to_string())
-                                                .unwrap_or_default();
-                                            let track_number = match tag
-                                                .track()
-                                                .map(|s| s.to_string())
-                                            {
-                                                Some(track) => track.parse::<u16>().unwrap_or(0),
-                                                None => 0,
-                                            };
-
-                                            let properties =
-                                                lofty::prelude::AudioFile::properties(&tagged_file);
-                                            let duration = Duration::from_secs(
-                                                properties.duration().as_secs(),
-                                            );
-
-                                            // println!("{}", tag.picture_count());
-                                            // let thing = tag.pictures();
-                                            // for pic in tag.pictures() {
-                                            //     println!("{:?}", pic.pic_type());
-                                            // }
-
-                                            let music_file = MusicFile {
-                                                album_artist: album_artist.clone(),
-                                                album: album.clone(),
-                                                track_number,
-                                                artist,
-                                                track_title,
-                                                duration,
-                                                date,
-                                                saved_path: saved_path.clone(),
-                                                uri: url.to_string(),
-                                                //metadata,
-                                                playing: false,
-                                                paused: false,
-                                                id: index,
-                                            };
-
-                                            match self.albums.iter_mut().find(|album| {
-                                                album.album == music_file.album
-                                                    && album.album_artist == music_file.album_artist
-                                            }) {
-                                                Some(album) => {
-                                                    album.tracks.push(index);
-                                                }
-                                                None => {
-
-                                                    let path_to_write = "~/.local/share/jams/covers/".to_string() + index.to_string().as_str();
-
-                                                    match tag.pictures().first() {
-                                                        None => {}
-                                                        Some(picture) => {
-                                                            let data = picture.data();
-
-                                                            fs::create_dir_all("~/.local/share/jams/covers/").expect("TODO: panic message");
-
-                                                            let mut file = fs::OpenOptions::new()
-                                                                .create(true) // To create a new file
-                                                                .write(true)
-                                                                // either use the ? operator or unwrap since it returns a Result
-                                                                .open(path_to_write.clone()).unwrap();
-
-                                                            file.write_all(&data).unwrap();
-                                                        }
-                                                    }
-
-                                                    let new_album = Album {
-                                                        album_artist: album_artist.clone(),
-                                                        album: album.clone(),
-                                                        cached_cover_path: path_to_write.clone(),
-                                                        tracks: vec![index],
-                                                    };
-                                                    self.albums.push(new_album);
-                                                }
-                                            }
-
-                                            self.scanned_files.push(music_file);
-                                        } else {
-                                            println!("No tags found in file");
-                                            continue;
-                                        };
-                                    }
-                                    Err(err) => eprintln!("Failed to run discovery: {err:?}"),
-                                }
-                            }
-                        }
-                        Err(entry_error) => {
-                            println!("URL {} could not be read", url);
-                        }
-                    }
-                }
-
-                // https://rust-lang-nursery.github.io/rust-cookbook/algorithms/sorting.html#sort-a-vector-of-structs
-                // Sorts a vec of structs by its natural order (aka the order that was declared in the struct)
-                self.scanned_files.sort();
+                write_loc_to_config(&url);
+                get_all_files(url, &mut self.albums, &mut self.scanned_files);
             }
 
             Message::StartPlayingNewTrack(uri) => {
@@ -1023,6 +903,92 @@ impl Application for Jams {
             }
             Message::Scrub(value) => {
                 self.scrub(value);
+            }
+            Message::SaveLibraryLocation => {
+                println!("This doesn't do anything right now.");
+            }
+            Message::ReOpenLibraryLocation => {
+                let home_dir = std::env::var("HOME").unwrap();
+                let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+                match fs::read_to_string(config_file_loc) {
+                    Ok(contents) => {
+                        println!("Locations contents: {}", contents);
+
+                        let path = Path::new(contents.trim_end());
+                        if path.exists() {
+                            match Url::from_file_path(path) {
+                                Ok(url) => {
+                                    println!("{}",url);
+                                    get_all_files(url, &mut self.albums, &mut self.scanned_files);
+                                },
+                                Err(_) => {
+                                    println!("Failed to convert library path to URL");
+                                }
+                            }
+                        } else {
+                            println!("dog the path don't exist");
+                            // Message::DebugStub
+                        }
+                    }
+                    Err(_) => {
+                        println!("Failed to open library config.");
+                    }
+                }
+
+
+                // let home_dir = std::env::var("HOME").unwrap();
+                // let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+                // match fs::read_to_string(config_file_loc) {
+                //     Ok(contents) => {
+                //         println!("Locations contents: {}", contents);
+                //         let path = Path::new(contents.as_str());
+                //         if path.exists() {
+                //             match Url::from_file_path(path) {
+                //                 Ok(url) => {
+                //                     println!("{}",url);
+                //                 },
+                //                 Err(_) => {
+                //                     println!("Failed to convert library path to URL");
+                //                 }
+                //             }
+                //         } else {
+                //             // Message::DebugStub
+                //         }
+                //     }
+                //     Err(_) => {
+                //         println!("Failed to open library config.");
+                //     }
+                // }
+
+                //     let home_dir = std::env::var("HOME").unwrap();
+                //     let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+                //     match fs::read_to_string(config_file_loc.clone()) {
+                //         Ok(contents) => {
+                //             println!("Locations contents: {}", contents);
+                //             let path = Path::new(contents.as_str());
+                //             if path.exists() {
+                //                 match Url::from_file_path(path.clone()) {
+                //                     Ok(url) => {
+                //                         println!("{}",url);
+                //                     },
+                //                     Err(_) => {
+                //                         println!("Failed to convert library path to URL");
+                //                     }
+                //                 }
+                //             } else {
+                //                 println!("{:?}", path);
+                //                 println!("library location does not exist sorry");
+                //             }
+                //         }
+                //         Err(_) => {
+                //             println!("Failed to open library config.");
+                //         }
+                //     }
+                //     Message::DebugStub
+
+            }
+            Message::ResetLibraryLocation => {
+                println!("ugh");
             }
             Message::DebugStub => {
                 println!("This doesn't do anything right now.");
@@ -1153,3 +1119,197 @@ fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
         None
     }
 }
+
+// fn get_all_files(url: Url, app_scope: &mut Jams) {
+fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<MusicFile>) {
+    for (index, entry) in WalkDir::new(url.to_file_path().unwrap())
+        .into_iter()
+        .enumerate()
+    {
+        match entry {
+            Ok(entry) => {
+                let is_audio = is_audio_file(entry.path()).unwrap_or_else(|_| false);
+
+                if entry.file_type().is_file() && is_audio {
+                    let saved_path = entry.clone().into_path();
+                    println!("{}", entry.path().display());
+                    match Url::from_file_path(entry.clone().into_path()) {
+                        Ok(url) => {
+                            let tagged_file =
+                                match lofty::read_from_path(entry.clone().path()) {
+                                    Ok(file) => file,
+                                    Err(err) => {
+                                        eprintln!("Error reading file: {}", err);
+                                        continue;
+                                    }
+                                };
+
+                            if let Some(tag) = tagged_file.primary_tag() {
+                                let track_title = match tag
+                                    .get_string(&ItemKey::TrackTitle)
+                                    .map(|s| s.to_string())
+                                {
+                                    Some(title) => title,
+                                    None => {
+                                        // If there's no track tag, fall back to the file name.
+                                        match entry.path().file_name() {
+                                            Some(filename) => match filename.to_str() {
+                                                Some(filename) => filename.to_string(),
+                                                None => String::from(""),
+                                            },
+                                            None => String::from(""),
+                                        }
+                                    }
+                                };
+                                let album = tag
+                                    .album()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| String::from("Unknown Album"));
+                                let artist = tag
+                                    .artist()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_default();
+                                let album_artist = match tag
+                                    .get_string(&ItemKey::AlbumArtist)
+                                    .map(|s| s.to_string())
+                                {
+                                    Some(album_artist) => album_artist,
+                                    None => artist.clone(),
+                                };
+                                let date = tag
+                                    .year()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_default();
+                                let track_number = match tag
+                                    .track()
+                                    .map(|s| s.to_string())
+                                {
+                                    Some(track) => track.parse::<u16>().unwrap_or(0),
+                                    None => 0,
+                                };
+
+                                let properties =
+                                    lofty::prelude::AudioFile::properties(&tagged_file);
+                                let duration = Duration::from_secs(
+                                    properties.duration().as_secs(),
+                                );
+
+                                // println!("{}", tag.picture_count());
+                                // let thing = tag.pictures();
+                                // for pic in tag.pictures() {
+                                //     println!("{:?}", pic.pic_type());
+                                // }
+
+                                let music_file = MusicFile {
+                                    album_artist: album_artist.clone(),
+                                    album: album.clone(),
+                                    track_number,
+                                    artist,
+                                    track_title,
+                                    duration,
+                                    date,
+                                    saved_path: saved_path.clone(),
+                                    uri: url.to_string(),
+                                    //metadata,
+                                    playing: false,
+                                    paused: false,
+                                    id: index,
+                                };
+
+                                match albums.iter_mut().find(|album| {
+                                    album.album == music_file.album
+                                        && album.album_artist == music_file.album_artist
+                                }) {
+                                    Some(album) => {
+                                        album.tracks.push(index);
+                                    }
+                                    None => {
+
+                                        let path_to_write = "~/.local/share/jams/covers/".to_string() + index.to_string().as_str();
+
+                                        match tag.pictures().first() {
+                                            None => {}
+                                            Some(picture) => {
+                                                let data = picture.data();
+
+                                                fs::create_dir_all("~/.local/share/jams/covers/").expect("TODO: panic message");
+
+                                                let mut file = fs::OpenOptions::new()
+                                                    .create(true) // To create a new file
+                                                    .write(true)
+                                                    // either use the ? operator or unwrap since it returns a Result
+                                                    .open(path_to_write.clone()).unwrap();
+
+                                                file.write_all(&data).unwrap();
+                                            }
+                                        }
+
+                                        let new_album = Album {
+                                            album_artist: album_artist.clone(),
+                                            album: album.clone(),
+                                            cached_cover_path: path_to_write.clone(),
+                                            tracks: vec![index],
+                                        };
+                                        albums.push(new_album);
+                                    }
+                                }
+
+                                scanned_files.push(music_file);
+                            } else {
+                                println!("No tags found in file");
+                                continue;
+                            };
+                        }
+                        Err(err) => eprintln!("Failed to run discovery: {err:?}"),
+                    }
+                }
+            }
+            Err(entry_error) => {
+                println!("URL {} could not be read", url);
+            }
+        }
+    }
+
+    // https://rust-lang-nursery.github.io/rust-cookbook/algorithms/sorting.html#sort-a-vector-of-structs
+    // Sorts a vec of structs by its natural order (aka the order that was declared in the struct)
+    scanned_files.sort();
+}
+
+fn write_loc_to_config(url: &Url) {
+    let home_dir = std::env::var("HOME").unwrap();
+    let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+    // TODO: make this less horrifying
+    let path_to_write = url.clone().to_file_path().unwrap().as_os_str().to_str().unwrap().to_string();
+
+    let mut file = File::create(&config_file_loc).unwrap();
+    file.write_all(path_to_write.as_bytes()).unwrap();
+}
+
+fn get_loc_from_config() -> Result<Url, String> {
+    // this could have a better result error type
+    let home_dir = std::env::var("HOME").unwrap();
+    let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+
+    match fs::read_to_string(config_file_loc.clone()) {
+        Ok(contents) => {
+            let path = Path::new(contents.trim_end());
+            if path.exists() {
+                match Url::from_file_path(path) {
+                    Ok(url) => Ok(url),
+                    Err(_) => {
+                        let err_msg = format!("Failed to convert library path {} to URL.", path.display());
+                        Err(err_msg)
+                    }
+                }
+            } else {
+                let err_msg = format!("Library path {} does not exist.", path.display());
+                Err(err_msg)
+            }
+        }
+        Err(_) => {
+            let err_msg = format!("Config file at {} does not exist.", config_file_loc);
+            Err(String::from(""))
+        }
+    }
+}
+
