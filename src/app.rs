@@ -810,6 +810,7 @@ impl Application for Jams {
             }
 
             Message::AddSongsToLibrary(url) => {
+                write_loc_to_config(&url);
                 get_all_files(url, self);
             }
 
@@ -1264,3 +1265,12 @@ fn get_all_files(url: Url, app_scope: &mut Jams) {
     app_scope.scanned_files.sort();
 }
 
+fn write_loc_to_config(url: &Url) {
+    let home_dir = std::env::var("HOME").unwrap();
+    let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+    let path_to_write = url.clone().to_file_path().unwrap().as_os_str().to_str().unwrap().to_string();
+
+
+    let mut file = File::create(&config_file_loc).unwrap();
+    file.write_all(path_to_write.as_bytes()).unwrap();
+}
