@@ -264,20 +264,29 @@ impl Application for Jams {
             .data::<Page>(Page::Page4)
             .icon(icon_cache_get("music-artist-symbolic", 16));
 
-        let scanned_files = vec![];
-        let albums = vec![];
+        let mut scanned_files = vec![];
+        let mut albums = vec![];
+
+        match get_loc_from_config() {
+            Ok(url) => {
+                get_all_files(url, &mut albums, &mut scanned_files);
+            }
+            Err(err_msg) => {
+                println!("{}", err_msg);
+            }
+        }
 
         gst::init().expect("Could not initialize GStreamer.");
 
         let play = gst_play::Play::new(None::<gst_play::PlayVideoRenderer>);
         let gst_content = Vec::new();
 
-        let mut audio_player = GStreamerPlayer {
+        let audio_player = GStreamerPlayer {
             player: play,
             content: gst_content,
         };
 
-        let mut global_play_state: PlayState = PlayState::default();
+        let global_play_state: PlayState = PlayState::default();
 
         let mut app = Jams {
             core,
@@ -811,7 +820,7 @@ impl Application for Jams {
 
             Message::AddSongsToLibrary(url) => {
                 write_loc_to_config(&url);
-                get_all_files(url, self);
+                get_all_files(url, &mut self.albums, &mut self.scanned_files);
             }
 
             Message::StartPlayingNewTrack(uri) => {
@@ -910,7 +919,7 @@ impl Application for Jams {
                             match Url::from_file_path(path) {
                                 Ok(url) => {
                                     println!("{}",url);
-                                    get_all_files(url, self);
+                                    get_all_files(url, &mut self.albums, &mut self.scanned_files);
                                 },
                                 Err(_) => {
                                     println!("Failed to convert library path to URL");
@@ -1111,7 +1120,8 @@ fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
     }
 }
 
-fn get_all_files(url: Url, app_scope: &mut Jams) {
+// fn get_all_files(url: Url, app_scope: &mut Jams) {
+fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<MusicFile>) {
     for (index, entry) in WalkDir::new(url.to_file_path().unwrap())
         .into_iter()
         .enumerate()
@@ -1206,7 +1216,7 @@ fn get_all_files(url: Url, app_scope: &mut Jams) {
                                     id: index,
                                 };
 
-                                match app_scope.albums.iter_mut().find(|album| {
+                                match albums.iter_mut().find(|album| {
                                     album.album == music_file.album
                                         && album.album_artist == music_file.album_artist
                                 }) {
@@ -1240,11 +1250,11 @@ fn get_all_files(url: Url, app_scope: &mut Jams) {
                                             cached_cover_path: path_to_write.clone(),
                                             tracks: vec![index],
                                         };
-                                        app_scope.albums.push(new_album);
+                                        albums.push(new_album);
                                     }
                                 }
 
-                                app_scope.scanned_files.push(music_file);
+                                scanned_files.push(music_file);
                             } else {
                                 println!("No tags found in file");
                                 continue;
@@ -1262,15 +1272,44 @@ fn get_all_files(url: Url, app_scope: &mut Jams) {
 
     // https://rust-lang-nursery.github.io/rust-cookbook/algorithms/sorting.html#sort-a-vector-of-structs
     // Sorts a vec of structs by its natural order (aka the order that was declared in the struct)
-    app_scope.scanned_files.sort();
+    scanned_files.sort();
 }
 
 fn write_loc_to_config(url: &Url) {
     let home_dir = std::env::var("HOME").unwrap();
     let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+    // TODO: make this less horrifying
     let path_to_write = url.clone().to_file_path().unwrap().as_os_str().to_str().unwrap().to_string();
-
 
     let mut file = File::create(&config_file_loc).unwrap();
     file.write_all(path_to_write.as_bytes()).unwrap();
 }
+
+fn get_loc_from_config() -> Result<Url, String> {
+    // this could have a better result error type
+    let home_dir = std::env::var("HOME").unwrap();
+    let config_file_loc = format!("{}/.config/jams/locations", home_dir);
+
+    match fs::read_to_string(config_file_loc.clone()) {
+        Ok(contents) => {
+            let path = Path::new(contents.trim_end());
+            if path.exists() {
+                match Url::from_file_path(path) {
+                    Ok(url) => Ok(url),
+                    Err(_) => {
+                        let err_msg = format!("Failed to convert library path {} to URL.", path.display());
+                        Err(err_msg)
+                    }
+                }
+            } else {
+                let err_msg = format!("Library path {} does not exist.", path.display());
+                Err(err_msg)
+            }
+        }
+        Err(_) => {
+            let err_msg = format!("Config file at {} does not exist.", config_file_loc);
+            Err(String::from(""))
+        }
+    }
+}
+
