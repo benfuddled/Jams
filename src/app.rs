@@ -4,8 +4,10 @@ use std::cell::RefCell;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::widget::RcElementWrapper;
 use cosmic::iced::{alignment, keyboard, time, Alignment, ContentFit, Length, Subscription};
-use cosmic::widget::{self, button, icon, image, menu, nav_bar, slider, text, Column, Container, FlexRow, Grid, Row};
+use cosmic::iced::event::{self,Event};
+use cosmic::widget::{self, button, icon, image, menu, nav_bar, slider, text, scrollable, Column, Container, FlexRow, Grid, Row};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use lofty::prelude::{Accessor, TaggedFileExt};
 use lofty::tag::ItemKey;
@@ -23,7 +25,6 @@ use infer::Infer;
 
 use crate::icon_cache::IconCache;
 use cosmic::dialog::file_chooser::{self};
-use cosmic::iced_widget::Scrollable;
 use url::Url;
 use walkdir::WalkDir;
 
@@ -146,6 +147,7 @@ pub enum Message {
     SaveLibraryLocation,
     ResetLibraryLocation,
     ReOpenLibraryLocation,
+    KeyboardEvent(Event),
 }
 
 /// Identifies a page in the application.
@@ -314,14 +316,14 @@ impl Application for Jams {
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         let menu_bar = menu::bar(vec![
             menu::Tree::with_children(
-                menu::root(fl!("view")),
+                RcElementWrapper::new(menu::root(fl!("view")).into()),
                 menu::items(
                     &self.key_binds,
                     vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
                 ),
             ),
             menu::Tree::with_children(
-                menu::root(fl!("debug")),
+                RcElementWrapper::new(menu::root(fl!("debug")).into()),
                 menu::items(
                     &self.key_binds,
                     vec![menu::Item::Button(
@@ -486,7 +488,10 @@ impl Application for Jams {
             controls_col = controls_col.push(timing_row);
 
             let controls_container =
-                Container::new(controls_col).class(cosmic::style::Container::ContextDrawer);
+                Container::new(controls_col);
+
+            // PORT ISSUE
+            //Container::new(controls_col).class(cosmic::style::Container::ContextDrawer);
 
             // TODO: Improve performance when rendering pages (specifically switching between them)
             if self.nav.text(self.nav.active()) == Option::from("All Music") {
@@ -559,9 +564,11 @@ impl Application for Jams {
                     }
                 }
 
-                let scroll_list = Scrollable::new(file_col)
-                    .height(Length::Fill)
-                    .width(Length::Fill);
+                let scroll_list = scrollable(file_col).height(Length::Fill).width(Length::Fill);
+
+                // let scroll_list = Scrollable::new(file_col)
+                //     .height(Length::Fill)
+                //     .width(Length::Fill);
                 let scroll_container = Container::new(scroll_list)
                     .height(Length::Fill)
                     .width(Length::Fill);
@@ -609,9 +616,11 @@ impl Application for Jams {
 
                 let list_of_albums_wrapped = list_of_albums.wrap();
 
-                let scroll_list = Scrollable::new(list_of_albums_wrapped)
-                    .height(Length::Fill)
-                    .width(Length::Fill);
+                let scroll_list = scrollable(list_of_albums_wrapped).height(Length::Fill).width(Length::Fill);
+
+                // let scroll_list = Scrollable::new(list_of_albums_wrapped)
+                //     .height(Length::Fill)
+                //     .width(Length::Fill);
                 let scroll_container = Container::new(scroll_list)
                     .height(Length::Fill)
                     .width(Length::Fill);
@@ -633,7 +642,7 @@ impl Application for Jams {
             let subtitle = text::title2(fl!("spelled-out"))
                 .size(18)
                 .font(cosmic::font::mono())
-                .line_height(cosmic::iced_core::text::LineHeight::Relative(2.5));
+                .line_height(cosmic::iced::daemon::program::graphics::core::text::LineHeight::Relative(2.5));
 
             let mut titles = Column::new().align_x(Alignment::Center);
 
@@ -666,25 +675,27 @@ impl Application for Jams {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let tick = match self.global_play_state {
-            PlayState::Idle => Subscription::none(),
-            PlayState::Paused => Subscription::none(),
-            PlayState::Playing { .. } => {
-                time::every(Duration::from_millis(100)).map(Message::WatchTick)
-            }
-        };
+        // let tick = match self.global_play_state {
+        //     PlayState::Idle => Subscription::none(),
+        //     PlayState::Paused => Subscription::none(),
+        //     PlayState::Playing { .. } => {
+        //         time::every(Duration::from_millis(100)).map(Message::WatchTick)
+        //     }
+        // };
+        //
+        // fn handle_hotkey(key: keyboard::Key, _modifiers: keyboard::Modifiers) -> Option<Message> {
+        //     use keyboard::key;
+        //
+        //     match key.as_ref() {
+        //         keyboard::Key::Named(key::Named::Space) => Some(Message::ResumeCurrentTrack),
+        //         keyboard::Key::Character("r") => Some(Message::PauseCurrentTrack),
+        //         _ => None,
+        //     }
+        // }
 
-        fn handle_hotkey(key: keyboard::Key, _modifiers: keyboard::Modifiers) -> Option<Message> {
-            use keyboard::key;
+        //Subscription::batch(vec![tick, keyboard::on_key_press(handle_hotkey)])
 
-            match key.as_ref() {
-                keyboard::Key::Named(key::Named::Space) => Some(Message::ResumeCurrentTrack),
-                keyboard::Key::Character("r") => Some(Message::PauseCurrentTrack),
-                _ => None,
-            }
-        }
-
-        Subscription::batch(vec![tick, keyboard::on_key_press(handle_hotkey)])
+        event::listen().map(Message::KeyboardEvent)
     }
 
     /// Application messages are handled here. The application state can be modified based on
@@ -990,6 +1001,36 @@ impl Application for Jams {
             Message::ResetLibraryLocation => {
                 println!("ugh");
             }
+            Message::KeyboardEvent(event) => match event {
+                // Event::Keyboard(keyboard::Event::KeyPressed {
+                //                     key: keyboard::Key::Named(keyboard::key::Named::Tab),
+                //                     modifiers,
+                //                     ..
+                //                 }) => {
+                //     if modifiers.shift() {
+                //         operation::focus_previous()
+                //     } else {
+                //         operation::focus_next()
+                //     }
+                // }
+                // Event::Keyboard(keyboard::Event::KeyPressed {
+                //                     key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                //                     ..
+                //                 }) => {
+                //     self.hide_modal();
+                //     Task::none()
+                // }
+                Event::Keyboard(keyboard::Event::KeyPressed { key: keyboard::Key::Named(keyboard::key::Named::Enter), .. }) => {
+                    //     match key.as_ref() {
+                    //         keyboard::Key::Named(key::Named::Space) => Some(Message::ResumeCurrentTrack),
+                    //         keyboard::Key::Character("r") => Some(Message::PauseCurrentTrack),
+                    //         _ => None,
+                    //     }
+                    //self.hide_modal();
+                    //Task::none()
+                }
+                _ => println!("key pressed")
+            },
             Message::DebugStub => {
                 println!("This doesn't do anything right now.");
             }
@@ -1036,13 +1077,15 @@ impl Jams {
             .on_press(Message::LaunchUrl(REPOSITORY.to_string()))
             .padding(0);
 
-        widget::column()
-            .push(icon)
-            .push(title)
-            .push(link)
-            //.align_items(Alignment::Center)
-            .spacing(space_xxs)
-            .into()
+        widget::column![icon, title, link].into()
+
+        // widget::column()
+        //     .push(icon)
+        //     .push(title)
+        //     .push(link)
+        //     //.align_items(Alignment::Center)
+        //     .spacing(space_xxs)
+        //     .into()
     }
 
     /// Updates the header and window titles.
@@ -1057,7 +1100,7 @@ impl Jams {
         }
 
         self.set_header_title(header_title);
-        self.set_window_title(window_title)
+        self.set_window_title(window_title, self.core.main_window_id().unwrap())
     }
 
     pub fn switch_track(&mut self, uri: String) {
