@@ -387,12 +387,12 @@ impl Application for Jams {
     /// To get a better sense of which widgets are available, check out the `widget` module.
     fn view(&self) -> Element<Self::Message> {
         // self.nav.text() - pass it a nav item from the model to get its text
-        println!("{:?}", self.nav.active()); // - get currently active nav
+        //println!("{:?}", self.nav.active()); // - get currently active nav
                                              // println!("{:?}", self
                                              //     .nav
                                              //     .active_data::<String>()
                                              //     .map_or("No page selected", String::as_str));
-        println!("{:?}", self.nav.text(self.nav.active()));
+        //println!("{:?}", self.nav.text(self.nav.active()));
         let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
@@ -675,13 +675,13 @@ impl Application for Jams {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        // let tick = match self.global_play_state {
-        //     PlayState::Idle => Subscription::none(),
-        //     PlayState::Paused => Subscription::none(),
-        //     PlayState::Playing { .. } => {
-        //         time::every(Duration::from_millis(100)).map(Message::WatchTick)
-        //     }
-        // };
+        let tick = match self.global_play_state {
+            PlayState::Idle => Subscription::none(),
+            PlayState::Paused => Subscription::none(),
+            PlayState::Playing { .. } => {
+                time::every(Duration::from_millis(100)).map(Message::WatchTick)
+            }
+        };
         //
         // fn handle_hotkey(key: keyboard::Key, _modifiers: keyboard::Modifiers) -> Option<Message> {
         //     use keyboard::key;
@@ -695,7 +695,9 @@ impl Application for Jams {
 
         //Subscription::batch(vec![tick, keyboard::on_key_press(handle_hotkey)])
 
-        event::listen().map(Message::KeyboardEvent)
+        Subscription::batch(vec![tick])
+
+        //event::listen().map(Message::KeyboardEvent)
     }
 
     /// Application messages are handled here. The application state can be modified based on
@@ -1029,7 +1031,7 @@ impl Application for Jams {
                     //self.hide_modal();
                     //Task::none()
                 }
-                _ => println!("key pressed")
+                _ => ()
             },
             Message::DebugStub => {
                 println!("This doesn't do anything right now.");
