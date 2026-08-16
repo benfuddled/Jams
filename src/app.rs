@@ -153,7 +153,6 @@ pub enum Message {
     SaveLibraryLocation,
     ResetLibraryLocation,
     ReOpenLibraryLocation,
-    KeyboardEvent(Key, Modifiers, Option<SmolStr>),
     ToggleCurrentTrack,
 }
 
@@ -1056,35 +1055,6 @@ impl Application for Jams {
             }
             Message::ResetLibraryLocation => {
                 println!("ugh");
-            }
-            Message::KeyboardEvent(key, modifiers, text) => {
-                // Event::Keyboard(keyboard::Event::KeyPressed {
-                //                     key: keyboard::Key::Named(keyboard::key::Named::Tab),
-                //                     modifiers,
-                //                     ..
-                //                 }) => {
-                //     if modifiers.shift() {
-                //         operation::focus_previous()
-                //     } else {
-                //         operation::focus_next()
-                //     }
-                // }
-                // Event::Keyboard(keyboard::Event::KeyPressed {
-                //                     key: keyboard::Key::Named(keyboard::key::Named::Escape),
-                //                     ..
-                //                 }) => {
-                //     self.hide_modal();
-                //     Task::none()
-                // }
-                // Event::Keyboard(keyboard::Event::KeyPressed { key: keyboard::Key::Named(keyboard::key::Named::Enter), .. }) => {
-                //     //     match key.as_ref() {
-                //     //         keyboard::Key::Named(key::Named::Space) => Some(Message::ResumeCurrentTrack),
-                //     //         keyboard::Key::Character("r") => Some(Message::PauseCurrentTrack),
-                //     //         _ => None,
-                //     //     }
-                //     //self.hide_modal();
-                //     //Task::none()
-                // }
             }
             Message::DebugStub => {
                 println!("This action doesn't do anything right now.");
