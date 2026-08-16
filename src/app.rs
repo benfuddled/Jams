@@ -1054,7 +1054,7 @@ impl Application for Jams {
                 //     Message::DebugStub
             }
             Message::ResetLibraryLocation => {
-                println!("ugh");
+                println!("coming soon");
             }
             Message::DebugStub => {
                 println!("This action doesn't do anything right now.");
