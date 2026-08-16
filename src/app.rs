@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::cell::RefCell;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::iced::event::{self, Event};
 use cosmic::iced::{alignment, keyboard, time, Alignment, ContentFit, Length, Subscription};
-use cosmic::widget::{self, button, icon, image, menu, nav_bar, slider, text, Column, Container, FlexRow, Grid, Row};
-use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
+use cosmic::widget::RcElementWrapper;
+use cosmic::widget::{
+    self, button, icon, image, menu, nav_bar, scrollable, slider, text, Column, Container, FlexRow,
+    Grid, Row,
+};
+use cosmic::{cosmic_theme, iced, theme, Application, ApplicationExt, Apply, Element};
 use lofty::prelude::{Accessor, TaggedFileExt};
 use lofty::tag::ItemKey;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,7 +28,9 @@ use infer::Infer;
 
 use crate::icon_cache::IconCache;
 use cosmic::dialog::file_chooser::{self};
-use cosmic::iced_widget::Scrollable;
+use cosmic::iced::core::SmolStr;
+use cosmic::iced::keyboard::key::Named;
+use cosmic::iced::keyboard::{key, Key, Modifiers};
 use url::Url;
 use walkdir::WalkDir;
 
@@ -146,6 +153,7 @@ pub enum Message {
     SaveLibraryLocation,
     ResetLibraryLocation,
     ReOpenLibraryLocation,
+    ToggleCurrentTrack,
 }
 
 /// Identifies a page in the application.
@@ -198,8 +206,7 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::SaveLibraryLocation => Message::SaveLibraryLocation,
             MenuAction::ResetLibraryLocation => Message::ResetLibraryLocation,
             MenuAction::ReOpenLibraryLocation => Message::ReOpenLibraryLocation,
-            }
-
+        }
     }
 }
 
@@ -314,36 +321,34 @@ impl Application for Jams {
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         let menu_bar = menu::bar(vec![
             menu::Tree::with_children(
-                menu::root(fl!("view")),
+                RcElementWrapper::new(menu::root(fl!("view")).into()),
                 menu::items(
                     &self.key_binds,
                     vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
                 ),
             ),
             menu::Tree::with_children(
-                menu::root(fl!("debug")),
+                RcElementWrapper::new(menu::root(fl!("debug")).into()),
                 menu::items(
                     &self.key_binds,
-                    vec![menu::Item::Button(
-                        fl!("debug"),
-                        None,
-                        MenuAction::DebugStub,
-                    ),
-                         menu::Item::Button(
-                             "Save Library Location".to_string(),
-                             None,
-                             MenuAction::SaveLibraryLocation,
-                         ),
-                    menu::Item::Button(
-                        "Reset Library Location".to_string(),
-                        None,
-                        MenuAction::ResetLibraryLocation,
-                    ),
-                    menu::Item::Button(
-                        "Re-Open Library Location".to_string(),
-                        None,
-                        MenuAction::ReOpenLibraryLocation,
-                    )],
+                    vec![
+                        menu::Item::Button(fl!("debug"), None, MenuAction::DebugStub),
+                        menu::Item::Button(
+                            "Save Library Location".to_string(),
+                            None,
+                            MenuAction::SaveLibraryLocation,
+                        ),
+                        menu::Item::Button(
+                            "Reset Library Location".to_string(),
+                            None,
+                            MenuAction::ResetLibraryLocation,
+                        ),
+                        menu::Item::Button(
+                            "Re-Open Library Location".to_string(),
+                            None,
+                            MenuAction::ReOpenLibraryLocation,
+                        ),
+                    ],
                 ),
             ),
         ]);
@@ -385,12 +390,12 @@ impl Application for Jams {
     /// To get a better sense of which widgets are available, check out the `widget` module.
     fn view(&self) -> Element<Self::Message> {
         // self.nav.text() - pass it a nav item from the model to get its text
-        println!("{:?}", self.nav.active()); // - get currently active nav
-                                             // println!("{:?}", self
-                                             //     .nav
-                                             //     .active_data::<String>()
-                                             //     .map_or("No page selected", String::as_str));
-        println!("{:?}", self.nav.text(self.nav.active()));
+        //println!("{:?}", self.nav.active()); // - get currently active nav
+        // println!("{:?}", self
+        //     .nav
+        //     .active_data::<String>()
+        //     .map_or("No page selected", String::as_str));
+        //println!("{:?}", self.nav.text(self.nav.active()));
         let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
@@ -485,8 +490,10 @@ impl Application for Jams {
 
             controls_col = controls_col.push(timing_row);
 
-            let controls_container =
-                Container::new(controls_col).class(cosmic::style::Container::ContextDrawer);
+            let controls_container = Container::new(controls_col);
+
+            // PORT ISSUE
+            //Container::new(controls_col).class(cosmic::style::Container::ContextDrawer);
 
             // TODO: Improve performance when rendering pages (specifically switching between them)
             if self.nav.text(self.nav.active()) == Option::from("All Music") {
@@ -559,9 +566,13 @@ impl Application for Jams {
                     }
                 }
 
-                let scroll_list = Scrollable::new(file_col)
+                let scroll_list = scrollable(file_col)
                     .height(Length::Fill)
                     .width(Length::Fill);
+
+                // let scroll_list = Scrollable::new(file_col)
+                //     .height(Length::Fill)
+                //     .width(Length::Fill);
                 let scroll_container = Container::new(scroll_list)
                     .height(Length::Fill)
                     .width(Length::Fill);
@@ -571,7 +582,6 @@ impl Application for Jams {
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
-
                 let mut list_of_albums = Row::new().width(Length::Fill).align_y(Alignment::Center);
 
                 for album in &self.albums {
@@ -587,8 +597,13 @@ impl Application for Jams {
                     {
                         let mut album_content = Column::new();
 
-                        let album_front_cover = image(album.cached_cover_path.clone()).width(Length::Fixed(270.0)).height(Length::Fixed(270.0)).content_fit(ContentFit::Contain);
-                        let album_name = text(album.album.clone()).width(Length::Fill).align_x(Alignment::Center);
+                        let album_front_cover = image(album.cached_cover_path.clone())
+                            .width(Length::Fixed(270.0))
+                            .height(Length::Fixed(270.0))
+                            .content_fit(ContentFit::Contain);
+                        let album_name = text(album.album.clone())
+                            .width(Length::Fill)
+                            .align_x(Alignment::Center);
 
                         album_content = album_content.push(album_front_cover);
                         album_content = album_content.push(album_name);
@@ -609,9 +624,13 @@ impl Application for Jams {
 
                 let list_of_albums_wrapped = list_of_albums.wrap();
 
-                let scroll_list = Scrollable::new(list_of_albums_wrapped)
+                let scroll_list = scrollable(list_of_albums_wrapped)
                     .height(Length::Fill)
                     .width(Length::Fill);
+
+                // let scroll_list = Scrollable::new(list_of_albums_wrapped)
+                //     .height(Length::Fill)
+                //     .width(Length::Fill);
                 let scroll_container = Container::new(scroll_list)
                     .height(Length::Fill)
                     .width(Length::Fill);
@@ -633,7 +652,9 @@ impl Application for Jams {
             let subtitle = text::title2(fl!("spelled-out"))
                 .size(18)
                 .font(cosmic::font::mono())
-                .line_height(cosmic::iced_core::text::LineHeight::Relative(2.5));
+                .line_height(
+                    cosmic::iced::daemon::program::graphics::core::text::LineHeight::Relative(2.5),
+                );
 
             let mut titles = Column::new().align_x(Alignment::Center);
 
@@ -674,17 +695,36 @@ impl Application for Jams {
             }
         };
 
-        fn handle_hotkey(key: keyboard::Key, _modifiers: keyboard::Modifiers) -> Option<Message> {
-            use keyboard::key;
-
-            match key.as_ref() {
-                keyboard::Key::Named(key::Named::Space) => Some(Message::ResumeCurrentTrack),
-                keyboard::Key::Character("r") => Some(Message::PauseCurrentTrack),
-                _ => None,
+        let events = event::listen_with(|event, _status, _id| match event {
+            iced::Event::Window(iced::window::Event::Resized(size)) => {
+                //Some(ViewerMessage::WindowResized(size))
+                Some(Message::DebugStub)
             }
-        }
+            iced::Event::Window(iced::window::Event::CloseRequested) => Some(Message::DebugStub),
+            iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                key,
+                modifiers,
+                text,
+                ..
+            }) => {
+                match key {
+                    Key::Named(keyboard::key::Named::Enter) => {
+                        println!("Enter pressed!");
+                        Some(Message::ToggleCurrentTrack)
+                    }
+                    Key::Character(_) => {
+                        None
+                    }
+                    Key::Unidentified => {
+                        None
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        });
 
-        Subscription::batch(vec![tick, keyboard::on_key_press(handle_hotkey)])
+        Subscription::batch(vec![events, tick])
     }
 
     /// Application messages are handled here. The application state can be modified based on
@@ -853,6 +893,34 @@ impl Application for Jams {
                 }
             }
 
+            Message::ToggleCurrentTrack => {
+                self.last_tick = Instant::now();
+                match self.global_play_state {
+                    PlayState::Idle => {}
+                    PlayState::Paused => {
+                        self.audio_player.player.play();
+                        self.global_play_state = PlayState::Playing;
+                        for file in &mut self.scanned_files {
+                            if file.paused == true {
+                                file.playing = true;
+                                file.paused = false;
+                            }
+                        }
+                    }
+                    PlayState::Playing => {
+                        self.audio_player.player.pause();
+                        self.global_play_state = PlayState::Paused;
+
+                        for file in &mut self.scanned_files {
+                            if file.playing == true {
+                                file.playing = false;
+                                file.paused = true;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Displays an error in the application's warning bar.
             Message::Error(why) => {
                 //self.error_status = Some(why);
@@ -918,9 +986,9 @@ impl Application for Jams {
                         if path.exists() {
                             match Url::from_file_path(path) {
                                 Ok(url) => {
-                                    println!("{}",url);
+                                    println!("{}", url);
                                     get_all_files(url, &mut self.albums, &mut self.scanned_files);
-                                },
+                                }
                                 Err(_) => {
                                     println!("Failed to convert library path to URL");
                                 }
@@ -934,7 +1002,6 @@ impl Application for Jams {
                         println!("Failed to open library config.");
                     }
                 }
-
 
                 // let home_dir = std::env::var("HOME").unwrap();
                 // let config_file_loc = format!("{}/.config/jams/locations", home_dir);
@@ -985,13 +1052,12 @@ impl Application for Jams {
                 //         }
                 //     }
                 //     Message::DebugStub
-
             }
             Message::ResetLibraryLocation => {
-                println!("ugh");
+                println!("coming soon");
             }
             Message::DebugStub => {
-                println!("This doesn't do anything right now.");
+                println!("This action doesn't do anything right now.");
             }
         }
         Task::none()
@@ -1036,13 +1102,15 @@ impl Jams {
             .on_press(Message::LaunchUrl(REPOSITORY.to_string()))
             .padding(0);
 
-        widget::column()
-            .push(icon)
-            .push(title)
-            .push(link)
-            //.align_items(Alignment::Center)
-            .spacing(space_xxs)
-            .into()
+        widget::column![icon, title, link].into()
+
+        // widget::column()
+        //     .push(icon)
+        //     .push(title)
+        //     .push(link)
+        //     //.align_items(Alignment::Center)
+        //     .spacing(space_xxs)
+        //     .into()
     }
 
     /// Updates the header and window titles.
@@ -1057,7 +1125,7 @@ impl Jams {
         }
 
         self.set_header_title(header_title);
-        self.set_window_title(window_title)
+        self.set_window_title(window_title, self.core.main_window_id().unwrap())
     }
 
     pub fn switch_track(&mut self, uri: String) {
@@ -1135,14 +1203,13 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                     println!("{}", entry.path().display());
                     match Url::from_file_path(entry.clone().into_path()) {
                         Ok(url) => {
-                            let tagged_file =
-                                match lofty::read_from_path(entry.clone().path()) {
-                                    Ok(file) => file,
-                                    Err(err) => {
-                                        eprintln!("Error reading file: {}", err);
-                                        continue;
-                                    }
-                                };
+                            let tagged_file = match lofty::read_from_path(entry.clone().path()) {
+                                Ok(file) => file,
+                                Err(err) => {
+                                    eprintln!("Error reading file: {}", err);
+                                    continue;
+                                }
+                            };
 
                             if let Some(tag) = tagged_file.primary_tag() {
                                 let track_title = match tag
@@ -1165,10 +1232,8 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                     .album()
                                     .map(|s| s.to_string())
                                     .unwrap_or_else(|| String::from("Unknown Album"));
-                                let artist = tag
-                                    .artist()
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_default();
+                                let artist =
+                                    tag.artist().map(|s| s.to_string()).unwrap_or_default();
                                 let album_artist = match tag
                                     .get_string(&ItemKey::AlbumArtist)
                                     .map(|s| s.to_string())
@@ -1176,23 +1241,15 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                     Some(album_artist) => album_artist,
                                     None => artist.clone(),
                                 };
-                                let date = tag
-                                    .year()
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_default();
-                                let track_number = match tag
-                                    .track()
-                                    .map(|s| s.to_string())
-                                {
+                                let date = tag.year().map(|s| s.to_string()).unwrap_or_default();
+                                let track_number = match tag.track().map(|s| s.to_string()) {
                                     Some(track) => track.parse::<u16>().unwrap_or(0),
                                     None => 0,
                                 };
 
                                 let properties =
                                     lofty::prelude::AudioFile::properties(&tagged_file);
-                                let duration = Duration::from_secs(
-                                    properties.duration().as_secs(),
-                                );
+                                let duration = Duration::from_secs(properties.duration().as_secs());
 
                                 // println!("{}", tag.picture_count());
                                 // let thing = tag.pictures();
@@ -1224,21 +1281,24 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                         album.tracks.push(index);
                                     }
                                     None => {
-
-                                        let path_to_write = "~/.local/share/jams/covers/".to_string() + index.to_string().as_str();
+                                        let path_to_write = "~/.local/share/jams/covers/"
+                                            .to_string()
+                                            + index.to_string().as_str();
 
                                         match tag.pictures().first() {
                                             None => {}
                                             Some(picture) => {
                                                 let data = picture.data();
 
-                                                fs::create_dir_all("~/.local/share/jams/covers/").expect("TODO: panic message");
+                                                fs::create_dir_all("~/.local/share/jams/covers/")
+                                                    .expect("TODO: panic message");
 
                                                 let mut file = fs::OpenOptions::new()
                                                     .create(true) // To create a new file
                                                     .write(true)
                                                     // either use the ? operator or unwrap since it returns a Result
-                                                    .open(path_to_write.clone()).unwrap();
+                                                    .open(path_to_write.clone())
+                                                    .unwrap();
 
                                                 file.write_all(&data).unwrap();
                                             }
@@ -1279,7 +1339,14 @@ fn write_loc_to_config(url: &Url) {
     let home_dir = std::env::var("HOME").unwrap();
     let config_file_loc = format!("{}/.config/jams/locations", home_dir);
     // TODO: make this less horrifying
-    let path_to_write = url.clone().to_file_path().unwrap().as_os_str().to_str().unwrap().to_string();
+    let path_to_write = url
+        .clone()
+        .to_file_path()
+        .unwrap()
+        .as_os_str()
+        .to_str()
+        .unwrap()
+        .to_string();
 
     let mut file = File::create(&config_file_loc).unwrap();
     file.write_all(path_to_write.as_bytes()).unwrap();
@@ -1297,7 +1364,8 @@ fn get_loc_from_config() -> Result<Url, String> {
                 match Url::from_file_path(path) {
                     Ok(url) => Ok(url),
                     Err(_) => {
-                        let err_msg = format!("Failed to convert library path {} to URL.", path.display());
+                        let err_msg =
+                            format!("Failed to convert library path {} to URL.", path.display());
                         Err(err_msg)
                     }
                 }
@@ -1312,4 +1380,3 @@ fn get_loc_from_config() -> Result<Url, String> {
         }
     }
 }
-
