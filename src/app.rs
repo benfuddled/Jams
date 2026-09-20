@@ -4,8 +4,8 @@ use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::event::{self, Event};
-use cosmic::iced::{alignment, keyboard, time, Alignment, ContentFit, Length, Subscription};
-use cosmic::widget::RcElementWrapper;
+use cosmic::iced::{alignment, keyboard, time, Alignment, ContentFit, Length, Padding, Pixels, Radius, Subscription};
+use cosmic::widget::{row, RcElementWrapper};
 use cosmic::widget::{
     self, button, icon, image, menu, nav_bar, scrollable, slider, text, Column, Container, FlexRow,
     Grid, Row,
@@ -31,6 +31,7 @@ use cosmic::dialog::file_chooser::{self};
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::keyboard::key::Named;
 use cosmic::iced::keyboard::{key, Key, Modifiers};
+use cosmic::widget::image::FilterMethod;
 use url::Url;
 use walkdir::WalkDir;
 
@@ -582,7 +583,7 @@ impl Application for Jams {
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
-                let mut list_of_albums = Row::new().width(Length::Fill).align_y(Alignment::Center);
+                let mut list_of_albums = Vec::new();
 
                 for album in &self.albums {
                     if self.search_term.is_empty()
@@ -595,42 +596,36 @@ impl Application for Jams {
                             .to_lowercase()
                             .contains(&self.search_term.to_lowercase())
                     {
-                        let mut album_content = Column::new();
+                        let mut album_content = Column::new().align_x(Alignment::Center);
 
                         let album_front_cover = image(album.cached_cover_path.clone())
-                            .width(Length::Fixed(270.0))
-                            .height(Length::Fixed(270.0))
-                            .content_fit(ContentFit::Contain);
-                        let album_name = text(album.album.clone())
+                            .width(Length::Fixed(220.0))
+                            .height(Length::Fixed(220.0))
+                            .content_fit(ContentFit::Contain)
+                            .border_radius(Radius::new(4.0))
+                            .filter_method(FilterMethod::Linear);
+                        let album_name = text::caption_heading(album.album.clone())
+                            .height(Length::Fixed(38.0))
                             .width(Length::Fill)
+                            .align_y(Alignment::Center)
                             .align_x(Alignment::Center);
 
                         album_content = album_content.push(album_front_cover);
                         album_content = album_content.push(album_name);
 
-                        let mut album_content_alignment = Row::new().align_y(Alignment::Start);
-                        album_content_alignment = album_content_alignment.push(album_content);
-
-                        let mut album_block = Column::new()
-                            .width(Length::Fill)
-                            .max_width(300)
-                            .spacing(8)
-                            .padding([6, 4, 6, 4]);
-                        album_block = album_block.push(album_content_alignment);
-
-                        list_of_albums = list_of_albums.push(album_block);
+                        list_of_albums.push(album_content.into());
                     }
                 }
 
-                let list_of_albums_wrapped = list_of_albums.wrap();
+                let flex_albums = widget::flex_row(list_of_albums)
+                    .min_item_width(220.0)
+                    .row_spacing(18)
+                    .column_spacing(18);
 
-                let scroll_list = scrollable(list_of_albums_wrapped)
+                let scroll_list = scrollable(flex_albums)
                     .height(Length::Fill)
                     .width(Length::Fill);
 
-                // let scroll_list = Scrollable::new(list_of_albums_wrapped)
-                //     .height(Length::Fill)
-                //     .width(Length::Fill);
                 let scroll_container = Container::new(scroll_list)
                     .height(Length::Fill)
                     .width(Length::Fill);
