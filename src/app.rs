@@ -42,6 +42,7 @@ use gstreamer::{glib, ClockTime};
 use gstreamer_play as gst_play;
 use lofty::picture::Picture;
 use taffy::{AlignContent, JustifyItems};
+use crate::core::views::album_grid;
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 lazy_static::lazy_static! {
@@ -102,9 +103,9 @@ pub struct MusicFile {
 
 #[derive(Debug, Clone)]
 pub struct Album {
-    album_artist: String,
-    album: String,
-    cached_cover_path: String,
+    pub(crate) album_artist: String,
+    pub(crate) album: String,
+    pub(crate) cached_cover_path: String,
     tracks: Vec<usize>, // TODO: refactor to use arc
 }
 
@@ -585,187 +586,18 @@ impl Application for Jams {
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
-                // let mut list_of_albums = Vec::new();
-                // // let mut list_of_albums_grid = widget::Grid::new()
-                // //     .justify_content(JustifyContent::Stretch)
-                // //     .column
-                // //     .width(Length::Fill);
-                //
-                //
-                // for album in &self.albums {
-                //     if self.search_term.is_empty()
-                //         || album
-                //             .album
-                //             .to_lowercase()
-                //             .contains(&self.search_term.to_lowercase())
-                //         || album
-                //             .album_artist
-                //             .to_lowercase()
-                //             .contains(&self.search_term.to_lowercase())
-                //     {
-                //         let mut album_content = Column::new().align_x(Alignment::Center).width(Length::Fixed(220.0));//.max_width(Pixels::from(180.0));
-                //
-                //         let album_front_cover = image(album.cached_cover_path.clone())
-                //             .width(Length::Fill)
-                //             .content_fit(ContentFit::Contain)
-                //             .border_radius(Radius::new(4.0))
-                //             .filter_method(FilterMethod::Linear);
-                //
-                //         let mut album_text = Column::new()
-                //             .align_x(Alignment::Center)
-                //             .height(Length::Fixed(45.0))
-                //             .width(Length::Fill);
-                //
-                //         let album_name = text::caption_heading(album.album.clone())
-                //             .width(Length::Fill)
-                //             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                //             .align_y(Alignment::Center)
-                //             .align_x(Alignment::Center);
-                //         let album_artist = text::caption(album.album_artist.clone())
-                //             .width(Length::Fill)
-                //             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                //             .align_y(Alignment::Center)
-                //             .align_x(Alignment::Center);
-                //
-                //         album_text = album_text.push(album_name);
-                //         album_text = album_text.push(album_artist);
-                //
-                //         album_content = album_content.push(album_front_cover);
-                //         album_content = album_content.push(album_text);
-                //
-                //         //let mut test_grid = widget::Grid::new();
-                //         //list_of_albums_grid = list_of_albums_grid.push(album_content);
-                //
-                //         list_of_albums.push(album_content.into());
-                //     }
-                // }
-
-                //let album_grid = widget::grid().push(list_of_albums);
-               // album_grid = album_grid.push(list_of_albums.into());
-
-                // let flex_albums = widget::flex_row(list_of_albums)
-                //     //.min_item_width(240.0)
-                //     .row_spacing(18)
-                //     // .align_items(Alignment::Center)
-                //     // .justify_items(Alignment::Center)
-                //     // .justify_content(JustifyContent::Start)
-                //     .column_spacing(18);
-
-                // let create_grid = |columns: usize, elements: Vec<Element<'_, Message>>| -> Grid<Message> {
-                //     let mut grid = grid();
-                //
-                //     for (index, item) in elements.into_iter().enumerate() {
-                //         grid = grid.push(item);
-                //
-                //         if index % (columns - 1) == 0 {
-                //             grid = grid.insert_row();
-                //         }
-                //     }
-                //     grid
-                // };
-
-                let responsive_grid = responsive(|size| {
-
-                    let mut number_of_columns = 1;
-                    let mut gap = 0.0;
-                    // This could be set by a slider.
-                    if size.width > 1600.0 {
-                        number_of_columns = 6;
-                        gap = 12.0;
-                    } else if size.width > 1200.0 {
-                        number_of_columns = 5;
-                        gap = 10.0;
-                    } else if size.width > 1000.0 {
-                        number_of_columns = 4;
-                        gap = 8.0;
-                    } else if size.width > 650.0 {
-                        number_of_columns = 3;
-                        gap = 6.0;
-                    } else if size.width > 350.0 {
-                        number_of_columns = 2;
-                        gap = 4.0;
-                    }
-
-                    let column_width = Length::Fixed((size.width / number_of_columns as f32) - 5.0);
-
-                    println!("{} {}", size.width, number_of_columns);
-
-                    // let max_album_width = Length::Fixed((size.width / number_of_columns as f32) - (10.0 * 2.0));
-
-                    let mut grid = widget::Grid::new()
-                        .width(Length::Fill);
-
-                    let mut curr_column = 1;
-                    for album in &self.albums {
-                        if self.search_term.is_empty()
-                            || album
-                            .album
-                            .to_lowercase()
-                            .contains(&self.search_term.to_lowercase())
-                            || album
+                let filtered_albums: Vec<Album> = self.albums.iter().filter(|album| {
+                    self.search_term.is_empty() ||
+                    album.album.to_lowercase().contains(&self.search_term.to_lowercase()) ||
+                        album
                             .album_artist
                             .to_lowercase()
                             .contains(&self.search_term.to_lowercase())
-                        {
+                }).cloned().collect();
 
-                            let mut album_content = Column::new()
-                                .align_x(Alignment::Center)
-                                .width(Length::Fill)
-                                .spacing(Pixels::from(5.0));
+                let grid_element = album_grid(filtered_albums);
 
-                            let album_front_cover = image(album.cached_cover_path.clone())
-                                .width(Length::Fill)
-                                .height(Length::Fill)
-                                .border_radius(Radius::new(5.0))
-                                .filter_method(FilterMethod::Linear)
-                                .content_fit(ContentFit::Fill);
-
-                            let album_cover_container = Container::new(album_front_cover)
-                                .width(column_width)
-                                .height(column_width);
-
-                            let mut album_text = Column::new()
-                                .align_x(Alignment::Center)
-                                .height(Length::Fixed(45.0))
-                                .width(Length::Fill);
-
-                            let album_name = text::caption_heading(album.album.clone())
-                                .width(Length::Fill)
-                                .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                                .align_y(Alignment::Center)
-                                .align_x(Alignment::Center);
-
-                            let album_artist = text::caption(album.album_artist.clone())
-                                .width(Length::Fill)
-                                .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                                .align_y(Alignment::Center)
-                                .align_x(Alignment::Center);
-
-                            album_text = album_text.push(album_name);
-                            album_text = album_text.push(album_artist);
-
-                            album_content = album_content.push(album_cover_container);
-                            album_content = album_content.push(album_text);
-
-                            let max_album_width = Length::Fixed((size.width / number_of_columns as f32) - 5.0); // 5.0 is to account for padding until scrollbar is improved.
-                            let album_container = Container::new(album_content)
-                                .width(max_album_width)
-                                .padding(Padding::from([0.0, gap]))
-                                .align_x(Alignment::Center);
-
-                            grid = grid.push(album_container);
-
-                            if curr_column % number_of_columns == 0 {
-                                grid = grid.insert_row();
-                            }
-
-                            curr_column = curr_column + 1;
-                        }
-                    }
-                    grid.into()
-                });
-
-                let scroll_list = scrollable(responsive_grid)
+                let scroll_list = scrollable(grid_element)
                     .height(Length::Fill)
                     .width(Length::Fill);
 
