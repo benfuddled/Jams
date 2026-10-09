@@ -1,10 +1,11 @@
+use std::path::Path;
 use std::sync::Arc;
 use cosmic::iced::alignment::Horizontal;
 use cosmic::iced::{Alignment, ContentFit, Length, Padding, Pixels, Radius};
 use cosmic::{widget, Element, Theme};
 use cosmic::iced::advanced::text::{Ellipsize, EllipsizeHeightLimit};
-use cosmic::widget::{image, responsive, text, Column, Container, Grid};
-use cosmic::widget::image::FilterMethod;
+use cosmic::widget::{image, responsive, text, Column, Container, Grid, Image};
+use cosmic::widget::image::{FilterMethod, Handle};
 use crate::app::{Album, Message};
 
 pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
@@ -30,7 +31,11 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
             gap = 4.0;
         }
 
-        let column_width = Length::Fixed((size.width / number_of_columns as f32) - 5.0);
+        // libcosmic scrollbars tend to overlap content, let's leave some space at the end.
+        let scrollbar_overlay_fix = (18.0 / number_of_columns as f32).ceil();
+
+        let column_width = (size.width.floor() / number_of_columns as f32).floor() - scrollbar_overlay_fix;
+        let album_size = column_width - (gap * 2.0);
 
         let mut grid: Grid<Message> = widget::Grid::new()
             .width(Length::Fill);
@@ -38,21 +43,43 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
         let mut curr_column = 1;
 
         for album in &albums {
+
             let mut album_content = Column::new()
                 .align_x(Alignment::Center)
                 .width(Length::Fill)
                 .spacing(Pixels::from(5.0));
 
-            let album_front_cover = image(album.cached_cover_path.clone())
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .border_radius(Radius::new(5.0))
-                .filter_method(FilterMethod::Linear)
-                .content_fit(ContentFit::Fill);
+            let album_front_cover: Image = match &album.cached_cover_path {
+                None => {
+                    let blank_album_image_handle: Handle = match cosmic::theme::is_dark() {
+                        true => {
+                            image::Handle::from_path(Path::new("./res/graphics/album-dark-mode.png"))
+                        }
+                        false => {
+                            image::Handle::from_path(Path::new("./res/graphics/album-light-mode.png"))
+                        }
+                    };
+
+                    image(blank_album_image_handle)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .border_radius(Radius::new(5.0))
+                        .filter_method(FilterMethod::Linear)
+                        .content_fit(ContentFit::Fill)
+                }
+                Some(path) => {
+                    image(path.clone())
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .border_radius(Radius::new(5.0))
+                        .filter_method(FilterMethod::Linear)
+                        .content_fit(ContentFit::Fill)
+                }
+            };
 
             let album_cover_container = Container::new(album_front_cover)
-                .width(column_width)
-                .height(column_width);
+                .width(Length::Fixed(album_size))
+                .height(Length::Fixed(album_size));
 
             let mut album_text = Column::new()
                 .align_x(Alignment::Center)
@@ -79,9 +106,8 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
                 .push(album_cover_container)
                 .push(album_text);
 
-            let max_album_width = Length::Fixed((size.width / number_of_columns as f32) - 5.0); // 5.0 is to account for padding until scrollbar is improved.
             let album_container = Container::new(album_content)
-                .width(max_album_width)
+                .width(Length::Fixed(column_width))
                 .padding(Padding::from([0.0, gap]))
                 .align_x(Alignment::Center);
 

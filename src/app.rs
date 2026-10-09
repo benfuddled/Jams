@@ -19,6 +19,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use std::fs::File;
+use std::env;
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
@@ -105,7 +106,7 @@ pub struct MusicFile {
 pub struct Album {
     pub(crate) album_artist: String,
     pub(crate) album: String,
-    pub(crate) cached_cover_path: String,
+    pub(crate) cached_cover_path: Option<String>,
     tracks: Vec<usize>, // TODO: refactor to use arc
 }
 
@@ -1266,14 +1267,17 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                         album.tracks.push(index);
                                     }
                                     None => {
-                                        let path_to_write = "~/.local/share/jams/covers/"
-                                            .to_string()
-                                            + index.to_string().as_str();
 
-                                        match tag.pictures().first() {
-                                            None => {}
+                                        let cached_path: Option<String> = match tag.pictures().first() {
+                                            None => {
+                                                None
+                                            }
                                             Some(picture) => {
                                                 let data = picture.data();
+
+                                                let path_to_write = "~/.local/share/jams/covers/"
+                                                .to_string()
+                                                    + index.to_string().as_str();
 
                                                 fs::create_dir_all("~/.local/share/jams/covers/")
                                                     .expect("TODO: panic message");
@@ -1286,13 +1290,15 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                                     .unwrap();
 
                                                 file.write_all(&data).unwrap();
+
+                                                Option::from(path_to_write)
                                             }
-                                        }
+                                        };
 
                                         let new_album = Album {
                                             album_artist: album_artist.clone(),
                                             album: album.clone(),
-                                            cached_cover_path: path_to_write.clone(),
+                                            cached_cover_path: Option::from(cached_path),
                                             tracks: vec![index],
                                         };
                                         albums.push(new_album);
