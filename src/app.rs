@@ -10,6 +10,7 @@ use cosmic::widget::{
     self, button, icon, image, menu, nav_bar, scrollable, slider, text, Column, Container, FlexRow,
     Grid, Row, grid
 };
+use uuid::Uuid;
 use cosmic::{cosmic_theme, iced, theme, Application, ApplicationExt, Apply, Element};
 use lofty::prelude::{Accessor, TaggedFileExt};
 use lofty::tag::ItemKey;
@@ -19,6 +20,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use std::fs::File;
+use std::env;
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
@@ -42,6 +44,7 @@ use gstreamer::{glib, ClockTime};
 use gstreamer_play as gst_play;
 use lofty::picture::Picture;
 use taffy::{AlignContent, JustifyItems};
+use crate::core::views::{album_grid, album_tracklist};
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 lazy_static::lazy_static! {
@@ -75,6 +78,8 @@ pub struct Jams {
     scrub_value: u8,
     search_expanded: bool,
     search_term: String,
+    /// Views
+    album_page: AlbumPage
 }
 
 pub struct GStreamerPlayer {
@@ -100,11 +105,24 @@ pub struct MusicFile {
     id: usize,
 }
 
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct AlbumPage {
+    selected_album_id: Option<Uuid>,
+    view: AlbumView,
+}
+
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub enum AlbumView {
+    Grid,
+    Single
+}
+
 #[derive(Debug, Clone)]
 pub struct Album {
-    album_artist: String,
-    album: String,
-    cached_cover_path: String,
+    pub(crate) album_id: uuid::Uuid,
+    pub(crate) album_artist: String,
+    pub(crate) album: String,
+    pub(crate) cached_cover_path: Option<String>,
     tracks: Vec<usize>, // TODO: refactor to use arc
 }
 
@@ -157,6 +175,7 @@ pub enum Message {
     ResetLibraryLocation,
     ReOpenLibraryLocation,
     ToggleCurrentTrack,
+    SelectAlbum(Uuid),
 }
 
 /// Identifies a page in the application.
@@ -313,6 +332,10 @@ impl Application for Jams {
             last_tick: Instant::now(),
             search_expanded: false,
             search_term: "".to_string(),
+            album_page: AlbumPage {
+                selected_album_id: None,
+                view: AlbumView::Grid,
+            }
         };
 
         let command = app.update_titles();
@@ -585,187 +608,29 @@ impl Application for Jams {
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
-                // let mut list_of_albums = Vec::new();
-                // // let mut list_of_albums_grid = widget::Grid::new()
-                // //     .justify_content(JustifyContent::Stretch)
-                // //     .column
-                // //     .width(Length::Fill);
-                //
-                //
-                // for album in &self.albums {
-                //     if self.search_term.is_empty()
-                //         || album
-                //             .album
-                //             .to_lowercase()
-                //             .contains(&self.search_term.to_lowercase())
-                //         || album
-                //             .album_artist
-                //             .to_lowercase()
-                //             .contains(&self.search_term.to_lowercase())
-                //     {
-                //         let mut album_content = Column::new().align_x(Alignment::Center).width(Length::Fixed(220.0));//.max_width(Pixels::from(180.0));
-                //
-                //         let album_front_cover = image(album.cached_cover_path.clone())
-                //             .width(Length::Fill)
-                //             .content_fit(ContentFit::Contain)
-                //             .border_radius(Radius::new(4.0))
-                //             .filter_method(FilterMethod::Linear);
-                //
-                //         let mut album_text = Column::new()
-                //             .align_x(Alignment::Center)
-                //             .height(Length::Fixed(45.0))
-                //             .width(Length::Fill);
-                //
-                //         let album_name = text::caption_heading(album.album.clone())
-                //             .width(Length::Fill)
-                //             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                //             .align_y(Alignment::Center)
-                //             .align_x(Alignment::Center);
-                //         let album_artist = text::caption(album.album_artist.clone())
-                //             .width(Length::Fill)
-                //             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                //             .align_y(Alignment::Center)
-                //             .align_x(Alignment::Center);
-                //
-                //         album_text = album_text.push(album_name);
-                //         album_text = album_text.push(album_artist);
-                //
-                //         album_content = album_content.push(album_front_cover);
-                //         album_content = album_content.push(album_text);
-                //
-                //         //let mut test_grid = widget::Grid::new();
-                //         //list_of_albums_grid = list_of_albums_grid.push(album_content);
-                //
-                //         list_of_albums.push(album_content.into());
-                //     }
-                // }
-
-                //let album_grid = widget::grid().push(list_of_albums);
-               // album_grid = album_grid.push(list_of_albums.into());
-
-                // let flex_albums = widget::flex_row(list_of_albums)
-                //     //.min_item_width(240.0)
-                //     .row_spacing(18)
-                //     // .align_items(Alignment::Center)
-                //     // .justify_items(Alignment::Center)
-                //     // .justify_content(JustifyContent::Start)
-                //     .column_spacing(18);
-
-                // let create_grid = |columns: usize, elements: Vec<Element<'_, Message>>| -> Grid<Message> {
-                //     let mut grid = grid();
-                //
-                //     for (index, item) in elements.into_iter().enumerate() {
-                //         grid = grid.push(item);
-                //
-                //         if index % (columns - 1) == 0 {
-                //             grid = grid.insert_row();
-                //         }
-                //     }
-                //     grid
-                // };
-
-                let responsive_grid = responsive(|size| {
-
-                    let mut number_of_columns = 1;
-                    let mut gap = 0.0;
-                    // This could be set by a slider.
-                    if size.width > 1600.0 {
-                        number_of_columns = 6;
-                        gap = 12.0;
-                    } else if size.width > 1200.0 {
-                        number_of_columns = 5;
-                        gap = 10.0;
-                    } else if size.width > 1000.0 {
-                        number_of_columns = 4;
-                        gap = 8.0;
-                    } else if size.width > 650.0 {
-                        number_of_columns = 3;
-                        gap = 6.0;
-                    } else if size.width > 350.0 {
-                        number_of_columns = 2;
-                        gap = 4.0;
-                    }
-
-                    let column_width = Length::Fixed((size.width / number_of_columns as f32) - 5.0);
-
-                    println!("{} {}", size.width, number_of_columns);
-
-                    // let max_album_width = Length::Fixed((size.width / number_of_columns as f32) - (10.0 * 2.0));
-
-                    let mut grid = widget::Grid::new()
-                        .width(Length::Fill);
-
-                    let mut curr_column = 1;
-                    for album in &self.albums {
-                        if self.search_term.is_empty()
-                            || album
-                            .album
-                            .to_lowercase()
-                            .contains(&self.search_term.to_lowercase())
-                            || album
+                let filtered_albums: Vec<Album> = self.albums.iter().filter(|album| {
+                    self.search_term.is_empty() ||
+                    album.album.to_lowercase().contains(&self.search_term.to_lowercase()) ||
+                        album
                             .album_artist
                             .to_lowercase()
                             .contains(&self.search_term.to_lowercase())
-                        {
+                }).cloned().collect();
 
-                            let mut album_content = Column::new()
-                                .align_x(Alignment::Center)
-                                .width(Length::Fill)
-                                .spacing(Pixels::from(5.0));
-
-                            let album_front_cover = image(album.cached_cover_path.clone())
-                                .width(Length::Fill)
-                                .height(Length::Fill)
-                                .border_radius(Radius::new(5.0))
-                                .filter_method(FilterMethod::Linear)
-                                .content_fit(ContentFit::Fill);
-
-                            let album_cover_container = Container::new(album_front_cover)
-                                .width(column_width)
-                                .height(column_width);
-
-                            let mut album_text = Column::new()
-                                .align_x(Alignment::Center)
-                                .height(Length::Fixed(45.0))
-                                .width(Length::Fill);
-
-                            let album_name = text::caption_heading(album.album.clone())
-                                .width(Length::Fill)
-                                .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                                .align_y(Alignment::Center)
-                                .align_x(Alignment::Center);
-
-                            let album_artist = text::caption(album.album_artist.clone())
-                                .width(Length::Fill)
-                                .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                                .align_y(Alignment::Center)
-                                .align_x(Alignment::Center);
-
-                            album_text = album_text.push(album_name);
-                            album_text = album_text.push(album_artist);
-
-                            album_content = album_content.push(album_cover_container);
-                            album_content = album_content.push(album_text);
-
-                            let max_album_width = Length::Fixed((size.width / number_of_columns as f32) - 5.0); // 5.0 is to account for padding until scrollbar is improved.
-                            let album_container = Container::new(album_content)
-                                .width(max_album_width)
-                                .padding(Padding::from([0.0, gap]))
-                                .align_x(Alignment::Center);
-
-                            grid = grid.push(album_container);
-
-                            if curr_column % number_of_columns == 0 {
-                                grid = grid.insert_row();
-                            }
-
-                            curr_column = curr_column + 1;
-                        }
+                let el: Element<Message> = match self.album_page.view {
+                    AlbumView::Grid => {
+                        album_grid(filtered_albums)
                     }
-                    grid.into()
-                });
+                    AlbumView::Single => {
+                        let album = self.albums.iter().find(|album| {
+                            album.album_id == self.album_page.selected_album_id.unwrap()
+                        }).unwrap();
 
-                let scroll_list = scrollable(responsive_grid)
+                        album_tracklist(album)
+                    }
+                };
+
+                let scroll_list = scrollable(el)
                     .height(Length::Fill)
                     .width(Length::Fill);
 
@@ -1091,6 +956,11 @@ impl Application for Jams {
 
             Message::SearchInput(term) => {
                 self.search_term = term;
+            }
+
+            Message::SelectAlbum(id) => {
+                self.album_page.selected_album_id = Option::from(id);
+                self.album_page.view = AlbumView::Single;
             }
 
             Message::Cancelled => {}
@@ -1434,16 +1304,19 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                         album.tracks.push(index);
                                     }
                                     None => {
-                                        let path_to_write = "~/.local/share/jams/covers/"
-                                            .to_string()
-                                            + index.to_string().as_str();
 
-                                        match tag.pictures().first() {
-                                            None => {}
+                                        let cached_path: Option<String> = match tag.pictures().first() {
+                                            None => {
+                                                None
+                                            }
                                             Some(picture) => {
                                                 let data = picture.data();
 
-                                                fs::create_dir_all("~/.local/share/jams/covers/")
+                                                let home_dir = std::env::var("HOME").unwrap();
+                                                let path_to_write = format!("{}/.local/share/jams/covers/{}", home_dir, index);
+                                                
+                                                let dir = format!("{}/.local/share/jams/covers/", home_dir);
+                                                fs::create_dir_all(dir)
                                                     .expect("TODO: panic message");
 
                                                 let mut file = fs::OpenOptions::new()
@@ -1454,13 +1327,17 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                                     .unwrap();
 
                                                 file.write_all(&data).unwrap();
+
+                                                Option::from(path_to_write)
                                             }
-                                        }
+                                        };
+
 
                                         let new_album = Album {
+                                            album_id: uuid::Uuid::new_v4(),
                                             album_artist: album_artist.clone(),
                                             album: album.clone(),
-                                            cached_cover_path: path_to_write.clone(),
+                                            cached_cover_path: Option::from(cached_path),
                                             tracks: vec![index],
                                         };
                                         albums.push(new_album);
