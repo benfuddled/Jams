@@ -1,10 +1,12 @@
 use std::path::Path;
 use std::sync::Arc;
 use cosmic::iced::alignment::Horizontal;
-use cosmic::iced::{Alignment, ContentFit, Length, Padding, Pixels, Radius};
+use cosmic::iced::{Alignment, Color, ContentFit, Length, Padding, Pixels, Radius, Vector};
 use cosmic::{widget, Element, Theme};
 use cosmic::iced::advanced::text::{Ellipsize, EllipsizeHeightLimit};
-use cosmic::widget::{image, responsive, text, Column, Container, Grid, Image};
+use cosmic::theme::Button;
+use cosmic::widget::{button, image, responsive, text, Column, Container, Grid, Image, Row};
+use cosmic::widget::button::Style;
 use cosmic::widget::image::{FilterMethod, Handle};
 use crate::app::{Album, Message};
 
@@ -106,7 +108,61 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
                 .push(album_cover_container)
                 .push(album_text);
 
-            let album_container = Container::new(album_content)
+            let album_button = button::custom_image_button(album_content, None)
+                .on_press(Message::SelectAlbum(album.album_id))
+                .padding(0)
+                .class(Button::Custom {
+                    active: Box::new(|_, _| Style {
+                        shadow_offset: Vector::new(0.0, 0.0),
+                        background: None,
+                        overlay: None,
+                        border_radius: Radius::from(0.0),
+                        border_width: 0.0,
+                        border_color: Color::TRANSPARENT,
+                        outline_width: 0.0,
+                        outline_color: Color::TRANSPARENT,
+                        icon_color: None,
+                        text_color: None,
+                    }),
+                    disabled: Box::new(|_| Style {
+                        shadow_offset: Vector::new(0.0, 0.0),
+                        background: None,
+                        overlay: None,
+                        border_radius: Radius::from(0.0),
+                        border_width: 0.0,
+                        border_color: Color::TRANSPARENT,
+                        outline_width: 0.0,
+                        outline_color: Color::TRANSPARENT,
+                        icon_color: None,
+                        text_color: None,
+                    }),
+                    hovered: Box::new(|_, _| Style {
+                        shadow_offset: Vector::new(0.0, 0.0),
+                        background: None,
+                        overlay: None,
+                        border_radius: Radius::from(0.0),
+                        border_width: 0.0,
+                        border_color: Color::TRANSPARENT,
+                        outline_width: 0.0,
+                        outline_color: Color::TRANSPARENT,
+                        icon_color: None,
+                        text_color: None,
+                    }),
+                    pressed: Box::new(|_, _| Style {
+                        shadow_offset: Vector::new(0.0, 0.0),
+                        background: None,
+                        overlay: None,
+                        border_radius: Radius::from(0.0),
+                        border_width: 0.0,
+                        border_color: Color::TRANSPARENT,
+                        outline_width: 0.0,
+                        outline_color: Color::TRANSPARENT,
+                        icon_color: None,
+                        text_color: None,
+                    }),
+                });
+
+            let album_container = Container::new(album_button)
                 .width(Length::Fixed(column_width))
                 .padding(Padding::from([0.0, gap]))
                 .align_x(Alignment::Center);
@@ -122,4 +178,61 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
         grid.into()
     });
     Container::new(responsive_grid).into()
+}
+
+pub fn album_tracklist<'a>(album: &Album) -> Element<'a, Message> {
+    let mut top_bar = Row::new()
+        .spacing(Pixels::from(20))
+        .align_y(Alignment::Center)
+        .width(Length::Fill);
+
+    let album_front_cover: Image = match &album.cached_cover_path {
+        None => {
+            let blank_album_image_handle: Handle = match cosmic::theme::is_dark() {
+                true => {
+                    image::Handle::from_path(Path::new("./res/graphics/album-dark-mode.png"))
+                }
+                false => {
+                    image::Handle::from_path(Path::new("./res/graphics/album-light-mode.png"))
+                }
+            };
+
+            image(blank_album_image_handle)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .border_radius(Radius::new(5.0))
+                .filter_method(FilterMethod::Linear)
+                .content_fit(ContentFit::Fill)
+        }
+        Some(path) => {
+            image(path.clone())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .border_radius(Radius::new(5.0))
+                .filter_method(FilterMethod::Linear)
+                .content_fit(ContentFit::Fill)
+        }
+    };
+
+    let album_cover_container = Container::new(album_front_cover)
+        .width(Length::Fixed(180.0))
+        .height(Length::Fixed(180.0));
+
+    let name = text::title2(album.album.clone())
+        .width(Length::Fill)
+        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
+        .align_y(Alignment::Center)
+        .align_x(Alignment::Start);
+
+    let artist = text::title3(album.album_artist.clone())
+        .width(Length::Fill)
+        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
+        .align_y(Alignment::Center)
+        .align_x(Alignment::Start);
+
+    let text_col = Column::new().push(name).push(artist);
+
+    top_bar = top_bar.push(album_cover_container).push(text_col);
+
+    Container::new(top_bar).into()
 }

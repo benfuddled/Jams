@@ -10,6 +10,7 @@ use cosmic::widget::{
     self, button, icon, image, menu, nav_bar, scrollable, slider, text, Column, Container, FlexRow,
     Grid, Row, grid
 };
+use uuid::Uuid;
 use cosmic::{cosmic_theme, iced, theme, Application, ApplicationExt, Apply, Element};
 use lofty::prelude::{Accessor, TaggedFileExt};
 use lofty::tag::ItemKey;
@@ -43,7 +44,7 @@ use gstreamer::{glib, ClockTime};
 use gstreamer_play as gst_play;
 use lofty::picture::Picture;
 use taffy::{AlignContent, JustifyItems};
-use crate::core::views::album_grid;
+use crate::core::views::{album_grid, album_tracklist};
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 lazy_static::lazy_static! {
@@ -77,6 +78,8 @@ pub struct Jams {
     scrub_value: u8,
     search_expanded: bool,
     search_term: String,
+    /// Views
+    album_page: AlbumPage
 }
 
 pub struct GStreamerPlayer {
@@ -102,8 +105,21 @@ pub struct MusicFile {
     id: usize,
 }
 
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct AlbumPage {
+    selected_album_id: Option<Uuid>,
+    view: AlbumView,
+}
+
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub enum AlbumView {
+    Grid,
+    Single
+}
+
 #[derive(Debug, Clone)]
 pub struct Album {
+    pub(crate) album_id: uuid::Uuid,
     pub(crate) album_artist: String,
     pub(crate) album: String,
     pub(crate) cached_cover_path: Option<String>,
@@ -159,6 +175,7 @@ pub enum Message {
     ResetLibraryLocation,
     ReOpenLibraryLocation,
     ToggleCurrentTrack,
+    SelectAlbum(Uuid),
 }
 
 /// Identifies a page in the application.
@@ -315,6 +332,10 @@ impl Application for Jams {
             last_tick: Instant::now(),
             search_expanded: false,
             search_term: "".to_string(),
+            album_page: AlbumPage {
+                selected_album_id: None,
+                view: AlbumView::Grid,
+            }
         };
 
         let command = app.update_titles();
@@ -596,9 +617,20 @@ impl Application for Jams {
                             .contains(&self.search_term.to_lowercase())
                 }).cloned().collect();
 
-                let grid_element = album_grid(filtered_albums);
+                let el: Element<Message> = match self.album_page.view {
+                    AlbumView::Grid => {
+                        album_grid(filtered_albums)
+                    }
+                    AlbumView::Single => {
+                        let album = self.albums.iter().find(|album| {
+                            album.album_id == self.album_page.selected_album_id.unwrap()
+                        }).unwrap();
 
-                let scroll_list = scrollable(grid_element)
+                        album_tracklist(album)
+                    }
+                };
+
+                let scroll_list = scrollable(el)
                     .height(Length::Fill)
                     .width(Length::Fill);
 
@@ -924,6 +956,11 @@ impl Application for Jams {
 
             Message::SearchInput(term) => {
                 self.search_term = term;
+            }
+
+            Message::SelectAlbum(id) => {
+                self.album_page.selected_album_id = Option::from(id);
+                self.album_page.view = AlbumView::Single;
             }
 
             Message::Cancelled => {}
@@ -1275,11 +1312,11 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                             Some(picture) => {
                                                 let data = picture.data();
 
-                                                let path_to_write = "~/.local/share/jams/covers/"
-                                                .to_string()
-                                                    + index.to_string().as_str();
-
-                                                fs::create_dir_all("~/.local/share/jams/covers/")
+                                                let home_dir = std::env::var("HOME").unwrap();
+                                                let path_to_write = format!("{}/.local/share/jams/covers/{}", home_dir, index);
+                                                
+                                                let dir = format!("{}/.local/share/jams/covers/", home_dir);
+                                                fs::create_dir_all(dir)
                                                     .expect("TODO: panic message");
 
                                                 let mut file = fs::OpenOptions::new()
@@ -1295,7 +1332,9 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                             }
                                         };
 
+
                                         let new_album = Album {
+                                            album_id: uuid::Uuid::new_v4(),
                                             album_artist: album_artist.clone(),
                                             album: album.clone(),
                                             cached_cover_path: Option::from(cached_path),
