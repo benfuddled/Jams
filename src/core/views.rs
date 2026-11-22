@@ -5,10 +5,10 @@ use cosmic::iced::{Alignment, Color, ContentFit, Length, Padding, Pixels, Radius
 use cosmic::{widget, Element, Theme};
 use cosmic::iced::advanced::text::{Ellipsize, EllipsizeHeightLimit};
 use cosmic::theme::Button;
-use cosmic::widget::{button, image, responsive, text, Column, Container, Grid, Image, Row};
+use cosmic::widget::{button, icon, image, responsive, scrollable, text, Column, Container, Grid, Image, Row};
 use cosmic::widget::button::Style;
 use cosmic::widget::image::{FilterMethod, Handle};
-use crate::app::{Album, Message};
+use crate::app::{Album, Message, MusicFile};
 
 pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
     let responsive_grid = responsive(move |size| {
@@ -180,7 +180,7 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
     Container::new(responsive_grid).into()
 }
 
-pub fn album_tracklist<'a>(album: &Album) -> Element<'a, Message> {
+pub fn album_tracklist<'a>(list: &Vec<MusicFile>, album: &Album) -> Element<'a, Message> {
     let mut top_bar = Row::new()
         .spacing(Pixels::from(20))
         .align_y(Alignment::Center)
@@ -232,7 +232,81 @@ pub fn album_tracklist<'a>(album: &Album) -> Element<'a, Message> {
 
     let text_col = Column::new().push(name).push(artist);
 
+    let tracklist = tracklist(&album.tracks, &String::from(""));
+
     top_bar = top_bar.push(album_cover_container).push(text_col);
 
-    Container::new(top_bar).into()
+    let mut content = Column::new().align_x(Alignment::Center);
+    content = content.push(top_bar);
+    content = content.push(tracklist);
+
+    Container::new(content).into()
+}
+
+pub fn tracklist<'a>(list: &Vec<MusicFile>, filter: &String) -> Element<'a, Message> {
+    let mut file_col = Column::new().spacing(2);
+
+    for file in list {
+        if filter.is_empty()
+            || file
+            .album
+            .to_lowercase()
+            .contains(&filter.to_lowercase())
+            || file
+            .artist
+            .to_lowercase()
+            .contains(&filter.to_lowercase())
+            || file
+            .track_title
+            .to_lowercase()
+            .contains(&filter.to_lowercase())
+            || file
+            .album_artist
+            .to_lowercase()
+            .contains(&filter.to_lowercase())
+        {
+            let mut file_txt_row = Row::new()
+                .align_y(Alignment::Center)
+                .spacing(8)
+                .padding([6, 4, 6, 4]);
+
+            let track_number = text(file.track_number.to_string())
+                .align_x(Horizontal::Center)
+                .width(Length::FillPortion(1));
+            file_txt_row = file_txt_row.push(track_number);
+
+            if file.paused == true {
+                let button =
+                    button::icon(icon::from_name("media-playback-start-symbolic"))
+                        .on_press(Message::ResumeCurrentTrack)
+                        .tooltip("Resume");
+                file_txt_row = file_txt_row.push(button);
+            } else if file.playing == true {
+                let button =
+                    button::icon(icon::from_name("media-playback-pause-symbolic"))
+                        .on_press(Message::PauseCurrentTrack)
+                        .tooltip("Pause");
+                file_txt_row = file_txt_row.push(button);
+            } else {
+                let button =
+                    button::icon(icon::from_name("media-playback-start-symbolic"))
+                        .on_press(Message::StartPlayingNewTrack(file.uri.clone()))
+                        .tooltip("Play");
+                file_txt_row = file_txt_row.push(button);
+            }
+
+            let title = text(file.track_title.clone()).width(Length::FillPortion(40));
+            let artist = text(file.artist.clone()).width(Length::FillPortion(20));
+            let album = text(file.album.clone()).width(Length::FillPortion(20));
+            file_txt_row = file_txt_row.push(title);
+            file_txt_row = file_txt_row.push(artist);
+            file_txt_row = file_txt_row.push(album);
+
+            file_col = file_col.push(file_txt_row);
+
+            file_col = file_col.push(widget::divider::horizontal::default());
+        }
+    }
+
+    Container::new(file_col).into()
 }

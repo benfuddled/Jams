@@ -44,7 +44,7 @@ use gstreamer::{glib, ClockTime};
 use gstreamer_play as gst_play;
 use lofty::picture::Picture;
 use taffy::{AlignContent, JustifyItems};
-use crate::core::views::{album_grid, album_tracklist};
+use crate::core::views::{album_grid, album_tracklist, tracklist};
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
 lazy_static::lazy_static! {
@@ -79,7 +79,8 @@ pub struct Jams {
     search_expanded: bool,
     search_term: String,
     /// Views
-    album_page: AlbumPage
+    album_view_options: AlbumViewOptions,
+    artist_view_options: ArtistViewOptions
 }
 
 pub struct GStreamerPlayer {
@@ -91,28 +92,39 @@ pub struct GStreamerPlayer {
 
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct MusicFile {
-    album_artist: String,
-    album: String,
-    track_number: u16,
-    artist: String,
-    track_title: String,
+    pub(crate) album_artist: String,
+    pub(crate) album: String,
+    pub(crate) track_number: u16,
+    pub(crate) artist: String,
+    pub(crate) track_title: String,
     duration: Duration,
     date: String,
     saved_path: PathBuf,
-    uri: String,
-    playing: bool,
-    paused: bool,
+    pub(crate) uri: String,
+    pub(crate) playing: bool,
+    pub(crate) paused: bool,
     id: usize,
 }
-
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct AlbumPage {
+pub struct AlbumViewOptions {
     selected_album_id: Option<Uuid>,
-    view: AlbumView,
+    sub_view_current: AlbumSubView
 }
 
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub enum AlbumView {
+pub enum AlbumSubView {
+    Grid,
+    Single
+}
+
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ArtistViewOptions {
+    selected_artist_id: Option<Uuid>,
+    sub_view_current: ArtistSubView
+}
+
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ArtistSubView {
     Grid,
     Single
 }
@@ -123,7 +135,7 @@ pub struct Album {
     pub(crate) album_artist: String,
     pub(crate) album: String,
     pub(crate) cached_cover_path: Option<String>,
-    tracks: Vec<usize>, // TODO: refactor to use arc
+    pub(crate) tracks: Vec<MusicFile>, // TODO: refactor to use arc
 }
 
 // TODO: MAKE THESE SOME()
@@ -332,9 +344,13 @@ impl Application for Jams {
             last_tick: Instant::now(),
             search_expanded: false,
             search_term: "".to_string(),
-            album_page: AlbumPage {
+            album_view_options: AlbumViewOptions {
                 selected_album_id: None,
-                view: AlbumView::Grid,
+                sub_view_current: AlbumSubView::Grid,
+            },
+            artist_view_options: ArtistViewOptions {
+                selected_artist_id: None,
+                sub_view_current: ArtistSubView::Grid,
             }
         };
 
@@ -523,88 +539,15 @@ impl Application for Jams {
 
             // TODO: Improve performance when rendering pages (specifically switching between them)
             if self.nav.text(self.nav.active()) == Option::from("All Music") {
-                let mut file_col = Column::new().spacing(2);
+                let tracks = tracklist(&self.scanned_files, &self.search_term);
 
-                for file in &self.scanned_files {
-                    if self.search_term.is_empty()
-                        || file
-                            .album
-                            .to_lowercase()
-                            .contains(&self.search_term.to_lowercase())
-                        || file
-                            .artist
-                            .to_lowercase()
-                            .contains(&self.search_term.to_lowercase())
-                        || file
-                            .track_title
-                            .to_lowercase()
-                            .contains(&self.search_term.to_lowercase())
-                        || file
-                            .album_artist
-                            .to_lowercase()
-                            .contains(&self.search_term.to_lowercase())
-                    {
-                        let mut file_txt_row = Row::new()
-                            .align_y(Alignment::Center)
-                            .spacing(8)
-                            .padding([6, 4, 6, 4]);
-
-                        let track_number = text(file.track_number.to_string())
-                            .align_x(Horizontal::Center)
-                            .width(Length::FillPortion(1));
-                        file_txt_row = file_txt_row.push(track_number);
-
-                        if file.paused == true {
-                            //let resume_txt = text("Resume");
-                            let button =
-                                button::icon(icon::from_name("media-playback-start-symbolic"))
-                                    .on_press(Message::ResumeCurrentTrack);
-                            file_txt_row = file_txt_row.push(button);
-                        } else if file.playing == true {
-                            //let playing_txt = text("Pause");
-                            let button =
-                                button::icon(icon::from_name("media-playback-pause-symbolic"))
-                                    .on_press(Message::PauseCurrentTrack);
-                            file_txt_row = file_txt_row.push(button);
-                        } else {
-                            //let paused_txt = text("Play");
-                            let button =
-                                button::icon(icon::from_name("media-playback-start-symbolic"))
-                                    .on_press(Message::StartPlayingNewTrack(file.uri.clone()));
-                            file_txt_row = file_txt_row.push(button);
-                        }
-
-                        let title = text(file.track_title.clone()).width(Length::FillPortion(40));
-                        let artist = text(file.artist.clone()).width(Length::FillPortion(20));
-                        let album = text(file.album.clone()).width(Length::FillPortion(20));
-                        file_txt_row = file_txt_row.push(title);
-                        file_txt_row = file_txt_row.push(artist);
-                        file_txt_row = file_txt_row.push(album);
-
-                        file_col = file_col.push(file_txt_row);
-
-                        file_col = file_col.push(widget::divider::horizontal::default());
-
-                        // let file_txt = text(file.saved_path.display().to_string());
-                        // let file_txt_container = Container::new(file_txt).width(Length::Fill);
-                        //
-                        // col = col.push(file_txt_container);
-                    }
-                }
-
-                let scroll_list = scrollable(file_col)
+                let scroll_list = scrollable(tracks)
                     .height(Length::Fill)
                     .width(Length::Fill);
 
-                // let scroll_list = Scrollable::new(file_col)
-                //     .height(Length::Fill)
-                //     .width(Length::Fill);
                 let scroll_container = Container::new(scroll_list)
                     .height(Length::Fill)
                     .width(Length::Fill);
-
-                // let paused_txt = text("Play");
-                // let button = button(paused_txt);
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
@@ -617,16 +560,16 @@ impl Application for Jams {
                             .contains(&self.search_term.to_lowercase())
                 }).cloned().collect();
 
-                let el: Element<Message> = match self.album_page.view {
-                    AlbumView::Grid => {
+                let el: Element<Message> = match self.album_view_options.sub_view_current {
+                    AlbumSubView::Grid => {
                         album_grid(filtered_albums)
                     }
-                    AlbumView::Single => {
+                    AlbumSubView::Single => {
                         let album = self.albums.iter().find(|album| {
-                            album.album_id == self.album_page.selected_album_id.unwrap()
+                            album.album_id == self.album_view_options.selected_album_id.unwrap()
                         }).unwrap();
 
-                        album_tracklist(album)
+                        album_tracklist(&self.scanned_files, album)
                     }
                 };
 
@@ -881,6 +824,15 @@ impl Application for Jams {
                         file.paused = true;
                     }
                 }
+
+                for album in &mut self.albums {
+                    for file in &mut album.tracks {
+                        if file.playing == true {
+                            file.playing = false;
+                            file.paused = true;
+                        }
+                    }
+                }
             }
 
             Message::ResumeCurrentTrack => {
@@ -892,6 +844,14 @@ impl Application for Jams {
                     if file.paused == true {
                         file.playing = true;
                         file.paused = false;
+                    }
+                }
+                for album in &mut self.albums {
+                    for file in &mut album.tracks {
+                        if file.paused == true {
+                            file.playing = true;
+                            file.paused = false;
+                        }
                     }
                 }
             }
@@ -909,6 +869,14 @@ impl Application for Jams {
                                 file.paused = false;
                             }
                         }
+                        for album in &mut self.albums {
+                            for file in &mut album.tracks {
+                                if file.paused == true {
+                                    file.playing = true;
+                                    file.paused = false;
+                                }
+                            }
+                        }
                     }
                     PlayState::Playing => {
                         self.audio_player.player.pause();
@@ -918,6 +886,14 @@ impl Application for Jams {
                             if file.playing == true {
                                 file.playing = false;
                                 file.paused = true;
+                            }
+                        }
+                        for album in &mut self.albums {
+                            for file in &mut album.tracks {
+                                if file.playing == true {
+                                    file.playing = false;
+                                    file.paused = true;
+                                }
                             }
                         }
                     }
@@ -959,8 +935,8 @@ impl Application for Jams {
             }
 
             Message::SelectAlbum(id) => {
-                self.album_page.selected_album_id = Option::from(id);
-                self.album_page.view = AlbumView::Single;
+                self.album_view_options.selected_album_id = Option::from(id);
+                self.album_view_options.sub_view_current = AlbumSubView::Single;
             }
 
             Message::Cancelled => {}
@@ -1301,7 +1277,7 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                         && album.album_artist == music_file.album_artist
                                 }) {
                                     Some(album) => {
-                                        album.tracks.push(index);
+                                        album.tracks.push(music_file.clone());
                                     }
                                     None => {
 
@@ -1338,7 +1314,7 @@ fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<Musi
                                             album_artist: album_artist.clone(),
                                             album: album.clone(),
                                             cached_cover_path: Option::from(cached_path),
-                                            tracks: vec![index],
+                                            tracks: vec![],
                                         };
                                         albums.push(new_album);
                                     }
