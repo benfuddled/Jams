@@ -13,11 +13,11 @@ A music player for the COSMIC desktop that you might want to use some day.
 - [x] Seek
 - [x] Persistent library
 - [x] Search
+- [x] Album view
 - [ ] Sorting
 - [ ] Shuffle
 - [ ] Repeat/Repeat one
 - [ ] MPRIS support
-- [ ] Album view
 - [ ] Artist view
 
 ## Beta and Beyond
