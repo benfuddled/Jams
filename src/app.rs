@@ -4,48 +4,28 @@ use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::event::{self, Event};
-use cosmic::iced::{alignment, keyboard, time, Alignment, ContentFit, Length, Padding, Pixels, Radius, Size, Subscription};
-use cosmic::widget::{container, responsive, row, JustifyContent, RcElementWrapper, Widget};
-use cosmic::widget::{
-    self, button, icon, image, menu, nav_bar, scrollable, slider, text, Column, Container, FlexRow,
-    Grid, Row, grid
-};
+use cosmic::iced::{keyboard, time, Alignment, Length, Subscription};
+use cosmic::widget::{self, button, icon, menu, nav_bar, scrollable, slider, text, Column, Container, Row, RcElementWrapper};
 use uuid::Uuid;
 use cosmic::{cosmic_theme, iced, theme, Application, ApplicationExt, Apply, Element};
-use lofty::prelude::{Accessor, TaggedFileExt};
-use lofty::tag::ItemKey;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use std::fs::File;
-use std::env;
-use std::io::{Read, Write};
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use infer::Infer;
 
 use crate::icon_cache::IconCache;
 use cosmic::dialog::file_chooser::{self};
-use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::text::{Ellipsize, EllipsizeHeightLimit};
-use cosmic::iced::keyboard::key::Named;
-use cosmic::iced::keyboard::{key, Key, Modifiers};
-use cosmic::widget::aspect_ratio::aspect_ratio_container;
-use cosmic::widget::image::FilterMethod;
+use cosmic::iced::keyboard::Key;
 use url::Url;
-use walkdir::WalkDir;
 
 use gstreamer as gst;
-use gstreamer::prelude::*;
-use gstreamer::{glib, ClockTime};
+use gstreamer::ClockTime;
 use gstreamer_play as gst_play;
-use lofty::picture::Picture;
-use taffy::{AlignContent, JustifyItems};
 use crate::core::library;
-use crate::core::library::{Album, AudioFile, Library};
+use crate::core::library::{Album, Library};
 use crate::core::views::{album_grid, album_tracklist, tracklist};
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
@@ -53,7 +33,7 @@ lazy_static::lazy_static! {
     static ref ICON_CACHE: Mutex<IconCache> = Mutex::new(IconCache::new());
 }
 
-pub fn icon_cache_get(name: &'static str, size: u16) -> widget::icon::Icon {
+pub fn icon_cache_get(name: &'static str, size: u16) -> icon::Icon {
     let mut icon_cache = ICON_CACHE.lock().unwrap();
     icon_cache.get(name, size)
 }
@@ -262,16 +242,7 @@ impl Application for Jams {
             .data::<Page>(Page::Artists)
             .icon(icon_cache_get("music-artist-symbolic", 16));
 
-        let mut library = Library::new();
-
-        match get_loc_from_config() {
-            Ok(url) => {
-                library::get_all_files(url, &mut library);
-            }
-            Err(err_msg) => {
-                println!("{}", err_msg);
-            }
-        }
+        let library = library::restore_library();
 
         gst::init().expect("Could not initialize GStreamer.");
 
@@ -761,8 +732,8 @@ impl Application for Jams {
             }
 
             Message::AddSongsToLibrary(url) => {
-                write_loc_to_config(&url);
                 library::get_all_files(url, &mut self.library);
+                library::cache_library(self.library.clone());
             }
 
             Message::StartPlayingNewTrack(id) => {
@@ -959,7 +930,7 @@ impl Application for Jams {
 
     /// Called when a nav item is selected.
     fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<Self::Message> {
-        if (self.nav.active() == id) {
+        if self.nav.active() == id {
             match self.nav.data::<Page>(id) {
                 Some(Page::Albums) => {
                     self.album_view_options.sub_view_current = AlbumSubView::Grid;
@@ -1056,76 +1027,5 @@ impl Jams {
         self.audio_player
             .player
             .seek(ClockTime::from_seconds(pos as u64));
-    }
-}
-
-fn build_grid (columns: usize, elements: Vec<Element<'_, Message>>) -> Grid<Message> {
-    let mut grid = grid()
-        .width(Length::Fill)
-        .column_alignment(Alignment::End);
-
-    for (curr_column, item) in elements.into_iter().enumerate() {
-        grid = grid.push(item);
-
-        if curr_column % columns == 0 {
-            grid = grid.insert_row();
-        }
-    }
-    grid
-}
-
-fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
-    if let Ok(s) = v.get::<&str>() {
-        Some(s.to_string())
-    } else if let Ok(serialized) = v.serialize() {
-        Some(serialized.into())
-    } else {
-        None
-    }
-}
-
-fn write_loc_to_config(url: &Url) {
-    let home_dir = std::env::var("HOME").unwrap();
-    let config_file_loc = format!("{}/.config/jams/locations", home_dir);
-    // TODO: make this less horrifying
-    let path_to_write = url
-        .clone()
-        .to_file_path()
-        .unwrap()
-        .as_os_str()
-        .to_str()
-        .unwrap()
-        .to_string();
-
-    let mut file = File::create(&config_file_loc).unwrap();
-    file.write_all(path_to_write.as_bytes()).unwrap();
-}
-
-fn get_loc_from_config() -> Result<Url, String> {
-    // this could have a better result error type
-    let home_dir = std::env::var("HOME").unwrap();
-    let config_file_loc = format!("{}/.config/jams/locations", home_dir);
-
-    match fs::read_to_string(config_file_loc.clone()) {
-        Ok(contents) => {
-            let path = Path::new(contents.trim_end());
-            if path.exists() {
-                match Url::from_file_path(path) {
-                    Ok(url) => Ok(url),
-                    Err(_) => {
-                        let err_msg =
-                            format!("Failed to convert library path {} to URL.", path.display());
-                        Err(err_msg)
-                    }
-                }
-            } else {
-                let err_msg = format!("Library path {} does not exist.", path.display());
-                Err(err_msg)
-            }
-        }
-        Err(_) => {
-            let err_msg = format!("Config file at {} does not exist.", config_file_loc);
-            Err(String::from(""))
-        }
     }
 }
