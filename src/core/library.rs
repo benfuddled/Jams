@@ -6,6 +6,9 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use directories::ProjectDirs;
+use ron::ser::{to_string_pretty, PrettyConfig};
+use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 use walkdir::WalkDir;
@@ -30,7 +33,7 @@ use walkdir::WalkDir;
 //     }
 // }
 
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct AudioFile {
     pub(crate) artist: String,
     pub(crate) album: String,
@@ -138,7 +141,7 @@ impl AudioFile {
         }
     }
 }
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Album {
     pub(crate) id: Uuid,
     pub(crate) album_artist: String,
@@ -146,7 +149,7 @@ pub struct Album {
     pub(crate) cover_art_path: Option<String>,
     pub(crate) tracks: Vec<Uuid>,
 }
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Artist {
     id: Uuid,
     albums: Vec<Uuid>,
@@ -157,7 +160,7 @@ pub struct Player {
     currently_playing_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Library {
     pub(crate) files: Vec<AudioFile>,
     pub(crate) albums: Vec<Album>,
@@ -222,6 +225,39 @@ impl AlbumById for Library {
     }
 }
 
+pub fn restore_library() -> Library {
+    match ProjectDirs::from("com", "benfuddled",  "Jams") {
+        Some(proj_dirs) => {
+            let library_loc = proj_dirs.data_dir().join("library.ron");
+            if library_loc.exists() {
+                match fs::read_to_string(&library_loc) {
+                    Ok(contents) => {
+                        match ron::from_str(&contents) {
+                            Ok(library) => {
+                                library
+                            },
+                            Err(err_msg) => {
+                                println!("Error loading library: {}", err_msg);
+                                Library::new()
+                            }
+                        }
+                    }
+                    Err(err_msg) => {
+                        println!("Error reading library file: {}", err_msg);
+                        Library::new()
+                    }
+                }
+            } else {
+                Library::new()
+            }
+        }
+        None => {
+            println!("Could not find project directories");
+            Library::new()
+        }
+    }
+}
+
 pub fn get_all_files(url: Url, library: &mut Library) {
     for (index, entry) in WalkDir::new(url.to_file_path().unwrap())
         .into_iter()
@@ -257,6 +293,27 @@ pub fn get_all_files(url: Url, library: &mut Library) {
     // https://rust-lang-nursery.github.io/rust-cookbook/algorithms/sorting.html#sort-a-vector-of-structs
     // Sorts a vec of structs by its natural order (aka the order that was declared in the struct)
     library.files.sort();
+}
+
+pub fn cache_library(library: Library) {
+    match to_string_pretty(&library, PrettyConfig::default()) {
+        Ok(ron_string) => {
+            if let Some(proj_dirs) = ProjectDirs::from("com", "benfuddled",  "Jams") {
+                let file_loc = proj_dirs.data_dir().join("library.ron");
+                match fs::write(file_loc, &ron_string) {
+                    Ok(_) => {
+                        println!("Wrote library.ron");
+                    }
+                    Err(err_msg) => {
+                        println!("Error writing library.ron file: {}", err_msg);
+                    }
+                }
+            }
+        }
+        Err(err_msg) => {
+            println!("Error converting library to pretty string: {}", err_msg);
+        }
+    }
 }
 
 fn is_audio_file(path: &Path) -> std::io::Result<bool> {
