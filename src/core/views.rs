@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use cosmic::iced::alignment::Horizontal;
@@ -8,7 +9,9 @@ use cosmic::theme::Button;
 use cosmic::widget::{button, icon, image, responsive, scrollable, text, Column, Container, Grid, Image, Row};
 use cosmic::widget::button::Style;
 use cosmic::widget::image::{FilterMethod, Handle};
-use crate::app::{Album, Message, MusicFile};
+use uuid::Uuid;
+use crate::app::{Message, PlayState};
+use crate::core::library::{Album, AudioFile, Library};
 
 pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
     let responsive_grid = responsive(move |size| {
@@ -51,7 +54,7 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
                 .width(Length::Fill)
                 .spacing(Pixels::from(5.0));
 
-            let album_front_cover: Image = match &album.cached_cover_path {
+            let album_front_cover: Image = match &album.cover_art_path {
                 None => {
                     let blank_album_image_handle: Handle = match cosmic::theme::is_dark() {
                         true => {
@@ -109,7 +112,7 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
                 .push(album_text);
 
             let album_button = button::custom_image_button(album_content, None)
-                .on_press(Message::SelectAlbum(album.album_id))
+                .on_press(Message::SelectAlbum(album.id))
                 .padding(0)
                 .class(Button::Custom {
                     active: Box::new(|_, _| Style {
@@ -180,13 +183,16 @@ pub fn album_grid<'a>(albums: Vec<Album>) -> Element<'a, Message> {
     Container::new(responsive_grid).into()
 }
 
-pub fn album_tracklist<'a>(list: &Vec<MusicFile>, album: &Album) -> Element<'a, Message> {
+// pub fn album_tracklist<'a>(list: &Vec<AudioFile>, album: &Album) -> Element<'a, Message> {
+pub fn album_tracklist<'a>(library: &Library, album_id: Uuid, play_state: &PlayState) -> Element<'a, Message> {
+    let album = library.albums.clone().into_iter().find(|album| album.id == album_id).unwrap();
+
     let mut top_bar = Row::new()
         .spacing(Pixels::from(20))
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
-    let album_front_cover: Image = match &album.cached_cover_path {
+    let album_front_cover: Image = match &album.cover_art_path {
         None => {
             let blank_album_image_handle: Handle = match cosmic::theme::is_dark() {
                 true => {
@@ -232,7 +238,14 @@ pub fn album_tracklist<'a>(list: &Vec<MusicFile>, album: &Album) -> Element<'a, 
 
     let text_col = Column::new().push(name).push(artist);
 
-    let tracklist = tracklist(&album.tracks, &String::from(""));
+    let track_ids: HashSet<Uuid> = album.tracks.iter().copied().collect();
+
+    let tracks: Vec<AudioFile> = library.files
+        .iter()
+        .filter(|file| track_ids.contains(&file.id))
+        .cloned()
+        .collect();
+    let tracklist = tracklist(&tracks, &String::from(""), library.current_track_id, play_state);
 
     top_bar = top_bar.push(album_cover_container).push(text_col);
 
@@ -243,7 +256,7 @@ pub fn album_tracklist<'a>(list: &Vec<MusicFile>, album: &Album) -> Element<'a, 
     Container::new(content).into()
 }
 
-pub fn tracklist<'a>(list: &Vec<MusicFile>, filter: &String) -> Element<'a, Message> {
+pub fn tracklist<'a>(list: &Vec<AudioFile>, filter: &String, current_track_id: Uuid, play_state: &PlayState) -> Element<'a, Message> {
     let mut file_col = Column::new().spacing(2);
 
     for file in list {
@@ -275,22 +288,34 @@ pub fn tracklist<'a>(list: &Vec<MusicFile>, filter: &String) -> Element<'a, Mess
                 .width(Length::FillPortion(1));
             file_txt_row = file_txt_row.push(track_number);
 
-            if file.paused == true {
-                let button =
-                    button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .on_press(Message::ResumeCurrentTrack)
-                        .tooltip("Resume");
-                file_txt_row = file_txt_row.push(button);
-            } else if file.playing == true {
-                let button =
-                    button::icon(icon::from_name("media-playback-pause-symbolic"))
-                        .on_press(Message::PauseCurrentTrack)
-                        .tooltip("Pause");
-                file_txt_row = file_txt_row.push(button);
+            if (file.id == current_track_id) {
+                match play_state {
+                    PlayState::Idle => {
+                        let button =
+                            button::icon(icon::from_name("media-playback-start-symbolic"))
+                                .on_press(Message::StartPlayingNewTrack(file.id.clone()))
+                                .tooltip("Play");
+                        file_txt_row = file_txt_row.push(button);
+                    }
+                    PlayState::Paused => {
+                        let button =
+                            button::icon(icon::from_name("media-playback-start-symbolic"))
+                                .on_press(Message::ResumeCurrentTrack)
+                                .tooltip("Resume");
+                        file_txt_row = file_txt_row.push(button);
+                    }
+                    PlayState::Playing => {
+                        let button =
+                            button::icon(icon::from_name("media-playback-pause-symbolic"))
+                                .on_press(Message::PauseCurrentTrack)
+                                .tooltip("Pause");
+                        file_txt_row = file_txt_row.push(button);
+                    }
+                }
             } else {
                 let button =
                     button::icon(icon::from_name("media-playback-start-symbolic"))
-                        .on_press(Message::StartPlayingNewTrack(file.uri.clone()))
+                        .on_press(Message::StartPlayingNewTrack(file.id.clone()))
                         .tooltip("Play");
                 file_txt_row = file_txt_row.push(button);
             }
