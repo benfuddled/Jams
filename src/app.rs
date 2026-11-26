@@ -44,6 +44,8 @@ use gstreamer::{glib, ClockTime};
 use gstreamer_play as gst_play;
 use lofty::picture::Picture;
 use taffy::{AlignContent, JustifyItems};
+use crate::core::library;
+use crate::core::library::{Album, AudioFile, Library};
 use crate::core::views::{album_grid, album_tracklist, tracklist};
 
 const REPOSITORY: &str = "https://github.com/benfuddled/Jams";
@@ -67,9 +69,6 @@ pub struct Jams {
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     /// A model that contains all of the pages assigned to the nav bar panel.
     nav: nav_bar::Model,
-    /// A vector that contains the list of scanned files
-    scanned_files: Vec<MusicFile>,
-    albums: Vec<Album>,
     audio_player: GStreamerPlayer,
     global_play_state: PlayState,
     current_track_duration: Duration,
@@ -80,7 +79,9 @@ pub struct Jams {
     search_term: String,
     /// Views
     album_view_options: AlbumViewOptions,
-    artist_view_options: ArtistViewOptions
+    artist_view_options: ArtistViewOptions,
+    /// New stuff for refactor
+    library: Library
 }
 
 pub struct GStreamerPlayer {
@@ -90,21 +91,6 @@ pub struct GStreamerPlayer {
     content: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct MusicFile {
-    pub(crate) album_artist: String,
-    pub(crate) album: String,
-    pub(crate) track_number: u16,
-    pub(crate) artist: String,
-    pub(crate) track_title: String,
-    duration: Duration,
-    date: String,
-    saved_path: PathBuf,
-    pub(crate) uri: String,
-    pub(crate) playing: bool,
-    pub(crate) paused: bool,
-    id: usize,
-}
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct AlbumViewOptions {
     selected_album_id: Option<Uuid>,
@@ -129,35 +115,6 @@ pub enum ArtistSubView {
     Single
 }
 
-#[derive(Debug, Clone)]
-pub struct Album {
-    pub(crate) album_id: uuid::Uuid,
-    pub(crate) album_artist: String,
-    pub(crate) album: String,
-    pub(crate) cached_cover_path: Option<String>,
-    pub(crate) tracks: Vec<MusicFile>, // TODO: refactor to use arc
-}
-
-// TODO: MAKE THESE SOME()
-impl Default for MusicFile {
-    fn default() -> Self {
-        MusicFile {
-            saved_path: PathBuf::new(),
-            uri: "/uri-does-not-exist".to_string(),
-            playing: false,
-            paused: false,
-            track_title: "Invalid Title".to_string(),
-            track_number: 0,
-            duration: Duration::new(0, 0),
-            artist: "Invalid Artist".to_string(),
-            album: "Invalid Album".to_string(),
-            album_artist: "Invalid Album Artist".to_string(),
-            date: "Invalid Date".to_string(),
-            id: 0,
-        }
-    }
-}
-
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
 /// This is used to communicate between the different parts of your application.
 /// If your application does not need to send messages, you can use an empty enum or `()`.
@@ -172,7 +129,7 @@ pub enum Message {
     OpenError(Arc<file_chooser::Error>),
     AddFolder,
     AddSongsToLibrary(Url),
-    StartPlayingNewTrack(String),
+    StartPlayingNewTrack(Uuid),
     PauseCurrentTrack,
     ResumeCurrentTrack,
     WatchTick(Instant),
@@ -305,12 +262,11 @@ impl Application for Jams {
             .data::<Page>(Page::Page4)
             .icon(icon_cache_get("music-artist-symbolic", 16));
 
-        let mut scanned_files = vec![];
-        let mut albums = vec![];
+        let mut library = Library::new();
 
         match get_loc_from_config() {
             Ok(url) => {
-                get_all_files(url, &mut albums, &mut scanned_files);
+                library::get_all_files(url, &mut library);
             }
             Err(err_msg) => {
                 println!("{}", err_msg);
@@ -334,11 +290,10 @@ impl Application for Jams {
             context_page: ContextPage::default(),
             key_binds: HashMap::new(),
             nav,
-            scanned_files,
-            albums,
             audio_player,
             global_play_state,
             scrub_value: 50,
+            library,
             current_track_duration: Duration::default(),
             seek_position: Duration::default(),
             last_tick: Instant::now(),
@@ -441,7 +396,7 @@ impl Application for Jams {
         let mut window_col = Column::new().spacing(10);
 
         // https://hermanradtke.com/2015/06/22/effectively-using-iterators-in-rust.html/
-        if &self.scanned_files.len() > &0 {
+        if &self.library.files.len() > &0 {
             let mut controls_row = Row::new()
                 .spacing(10)
                 .align_y(Alignment::Center)
@@ -539,7 +494,7 @@ impl Application for Jams {
 
             // TODO: Improve performance when rendering pages (specifically switching between them)
             if self.nav.text(self.nav.active()) == Option::from("All Music") {
-                let tracks = tracklist(&self.scanned_files, &self.search_term);
+                let tracks = tracklist(&self.library.files, &self.search_term, self.library.current_track_id, &self.global_play_state);
 
                 let scroll_list = scrollable(tracks)
                     .height(Length::Fill)
@@ -551,7 +506,7 @@ impl Application for Jams {
 
                 window_col = window_col.push(scroll_container);
             } else if self.nav.text(self.nav.active()) == Option::from("Albums") {
-                let filtered_albums: Vec<Album> = self.albums.iter().filter(|album| {
+                let filtered_albums: Vec<Album> = self.library.albums.iter().filter(|album| {
                     self.search_term.is_empty() ||
                     album.album.to_lowercase().contains(&self.search_term.to_lowercase()) ||
                         album
@@ -565,11 +520,11 @@ impl Application for Jams {
                         album_grid(filtered_albums)
                     }
                     AlbumSubView::Single => {
-                        let album = self.albums.iter().find(|album| {
-                            album.album_id == self.album_view_options.selected_album_id.unwrap()
+                        let album = self.library.albums.iter().find(|album| {
+                            album.id == self.album_view_options.selected_album_id.unwrap()
                         }).unwrap();
 
-                        album_tracklist(&self.scanned_files, album)
+                        album_tracklist(&self.library, album.id, &self.global_play_state)
                     }
                 };
 
@@ -693,13 +648,13 @@ impl Application for Jams {
                         self.global_play_state = PlayState::Idle;
 
                         let next_index = self
-                            .scanned_files
+                            .library.files
                             .iter()
-                            .position(|x| x.playing == true)
+                            .position(|file| file.id == self.library.current_track_id)
                             .unwrap()
                             + 1;
 
-                        let next_file = self.scanned_files.get(next_index);
+                        let next_file = self.library.files.get(next_index);
 
                         match next_file {
                             Some(track) => {
@@ -708,7 +663,7 @@ impl Application for Jams {
                                 self.audio_player.player.stop();
                                 self.global_play_state = PlayState::Idle;
                                 self.current_track_duration = Duration::new(0, 0);
-                                self.switch_track(track.uri.clone());
+                                self.switch_track(track.id.clone());
                             }
                             None => {
                                 println!("End of list reached. Stopping playback.");
@@ -718,19 +673,19 @@ impl Application for Jams {
                                 self.current_track_duration = Duration::new(0, 0);
                             }
                         }
-                        //Message::StartPlayingNewTrack();
                     }
                 }
             }
             Message::SkipNext => {
                 let next_index = self
-                    .scanned_files
+                    .library
+                    .files
                     .iter()
-                    .position(|x| x.playing == true || x.paused == true)
+                    .position(|file| file.id == self.library.current_track_id)
                     .unwrap()
                     + 1;
 
-                let next_file = self.scanned_files.get(next_index);
+                let next_file = self.library.files.get(next_index);
 
                 match next_file {
                     Some(track) => {
@@ -739,7 +694,7 @@ impl Application for Jams {
                         self.audio_player.player.stop();
                         self.global_play_state = PlayState::Idle;
                         self.current_track_duration = Duration::new(0, 0);
-                        self.switch_track(track.uri.clone());
+                        self.switch_track(track.id.clone());
                     }
                     None => {
                         println!("End of list reached. Stopping playback.");
@@ -752,16 +707,17 @@ impl Application for Jams {
             }
             Message::SkipPrev => {
                 let curr_index = self
-                    .scanned_files
+                    .library
+                    .files
                     .iter()
-                    .position(|x| x.playing == true || x.paused == true);
+                    .position(|file| file.id == self.library.current_track_id);
 
                 match curr_index {
                     Some(index) => {
                         if index == 0 {
                             self.scrub(0);
                         } else {
-                            let prev_file = self.scanned_files.get(index - 1);
+                            let prev_file = self.library.files.get(index - 1);
 
                             match prev_file {
                                 Some(track) => {
@@ -769,7 +725,7 @@ impl Application for Jams {
                                     self.seek_position = Duration::new(0, 0);
                                     self.global_play_state = PlayState::Idle;
                                     self.current_track_duration = Duration::new(0, 0);
-                                    self.switch_track(track.uri.clone());
+                                    self.switch_track(track.id.clone());
                                 }
                                 None => {
                                     println!("End of list reached. Stopping playback.");
@@ -806,54 +762,22 @@ impl Application for Jams {
 
             Message::AddSongsToLibrary(url) => {
                 write_loc_to_config(&url);
-                get_all_files(url, &mut self.albums, &mut self.scanned_files);
+                library::get_all_files(url, &mut self.library);
             }
 
-            Message::StartPlayingNewTrack(uri) => {
-                self.switch_track(uri);
+            Message::StartPlayingNewTrack(id) => {
+                self.switch_track(id);
             }
 
             Message::PauseCurrentTrack => {
                 self.audio_player.player.pause();
-                //self.audio_player.player.pause();
                 self.global_play_state = PlayState::Paused;
-
-                for file in &mut self.scanned_files {
-                    if file.playing == true {
-                        file.playing = false;
-                        file.paused = true;
-                    }
-                }
-
-                for album in &mut self.albums {
-                    for file in &mut album.tracks {
-                        if file.playing == true {
-                            file.playing = false;
-                            file.paused = true;
-                        }
-                    }
-                }
             }
 
             Message::ResumeCurrentTrack => {
                 self.last_tick = Instant::now();
                 self.audio_player.player.play();
-                //self.audio_player.player.play();
                 self.global_play_state = PlayState::Playing;
-                for file in &mut self.scanned_files {
-                    if file.paused == true {
-                        file.playing = true;
-                        file.paused = false;
-                    }
-                }
-                for album in &mut self.albums {
-                    for file in &mut album.tracks {
-                        if file.paused == true {
-                            file.playing = true;
-                            file.paused = false;
-                        }
-                    }
-                }
             }
 
             Message::ToggleCurrentTrack => {
@@ -863,39 +787,10 @@ impl Application for Jams {
                     PlayState::Paused => {
                         self.audio_player.player.play();
                         self.global_play_state = PlayState::Playing;
-                        for file in &mut self.scanned_files {
-                            if file.paused == true {
-                                file.playing = true;
-                                file.paused = false;
-                            }
-                        }
-                        for album in &mut self.albums {
-                            for file in &mut album.tracks {
-                                if file.paused == true {
-                                    file.playing = true;
-                                    file.paused = false;
-                                }
-                            }
-                        }
                     }
                     PlayState::Playing => {
                         self.audio_player.player.pause();
                         self.global_play_state = PlayState::Paused;
-
-                        for file in &mut self.scanned_files {
-                            if file.playing == true {
-                                file.playing = false;
-                                file.paused = true;
-                            }
-                        }
-                        for album in &mut self.albums {
-                            for file in &mut album.tracks {
-                                if file.playing == true {
-                                    file.playing = false;
-                                    file.paused = true;
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -971,7 +866,7 @@ impl Application for Jams {
                             match Url::from_file_path(path) {
                                 Ok(url) => {
                                     println!("{}", url);
-                                    get_all_files(url, &mut self.albums, &mut self.scanned_files);
+                                    library::get_all_files(url, &mut self.library);
                                 }
                                 Err(_) => {
                                     println!("Failed to convert library path to URL");
@@ -1112,28 +1007,26 @@ impl Jams {
         self.set_window_title(window_title, self.core.main_window_id().unwrap())
     }
 
-    pub fn switch_track(&mut self, uri: String) {
+    pub fn switch_track(&mut self, track_id: Uuid) {
         self.audio_player.player.stop();
+        self.library.current_track_id = track_id;
 
-        for file in &mut self.scanned_files {
-            file.paused = false;
-            if file.uri == uri {
-                println!("Switching to track: {}", uri);
-                file.playing = true;
+        match self.library.files.iter().find(|file| file.id == track_id) {
+            Some(file) => {
+                println!("Switching to track: {}", file.uri);
                 self.current_track_duration = file.duration;
-            } else {
-                file.playing = false;
+
+                self.audio_player.player.set_uri(Some(file.uri.as_str()));
+
+                self.audio_player.player.play();
+
+                self.last_tick = Instant::now();
+                self.seek_position = Duration::default();
+
+                self.global_play_state = PlayState::Playing;
             }
+            None => {}
         }
-
-        self.audio_player.player.set_uri(Some(uri.as_str()));
-
-        self.audio_player.player.play();
-
-        self.last_tick = Instant::now();
-        self.seek_position = Duration::default();
-
-        self.global_play_state = PlayState::Playing;
     }
 
     pub fn scrub(&mut self, value: u8) {
@@ -1185,160 +1078,6 @@ fn send_value_as_str(v: &glib::SendValue) -> Option<String> {
     } else {
         None
     }
-}
-
-// fn get_all_files(url: Url, app_scope: &mut Jams) {
-fn get_all_files(url: Url, albums: &mut Vec<Album>, scanned_files: &mut Vec<MusicFile>) {
-    for (index, entry) in WalkDir::new(url.to_file_path().unwrap())
-        .into_iter()
-        .enumerate()
-    {
-        match entry {
-            Ok(entry) => {
-                let is_audio = is_audio_file(entry.path()).unwrap_or_else(|_| false);
-
-                if entry.file_type().is_file() && is_audio {
-                    let saved_path = entry.clone().into_path();
-                    println!("{}", entry.path().display());
-                    match Url::from_file_path(entry.clone().into_path()) {
-                        Ok(url) => {
-                            let tagged_file = match lofty::read_from_path(entry.clone().path()) {
-                                Ok(file) => file,
-                                Err(err) => {
-                                    eprintln!("Error reading file: {}", err);
-                                    continue;
-                                }
-                            };
-
-                            if let Some(tag) = tagged_file.primary_tag() {
-                                let track_title = match tag
-                                    .get_string(&ItemKey::TrackTitle)
-                                    .map(|s| s.to_string())
-                                {
-                                    Some(title) => title,
-                                    None => {
-                                        // If there's no track tag, fall back to the file name.
-                                        match entry.path().file_name() {
-                                            Some(filename) => match filename.to_str() {
-                                                Some(filename) => filename.to_string(),
-                                                None => String::from(""),
-                                            },
-                                            None => String::from(""),
-                                        }
-                                    }
-                                };
-                                let album = tag
-                                    .album()
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_else(|| String::from("Unknown Album"));
-                                let artist =
-                                    tag.artist().map(|s| s.to_string()).unwrap_or_default();
-                                let album_artist = match tag
-                                    .get_string(&ItemKey::AlbumArtist)
-                                    .map(|s| s.to_string())
-                                {
-                                    Some(album_artist) => album_artist,
-                                    None => artist.clone(),
-                                };
-                                let date = tag.year().map(|s| s.to_string()).unwrap_or_default();
-                                let track_number = match tag.track().map(|s| s.to_string()) {
-                                    Some(track) => track.parse::<u16>().unwrap_or(0),
-                                    None => 0,
-                                };
-
-                                let properties =
-                                    lofty::prelude::AudioFile::properties(&tagged_file);
-                                let duration = Duration::from_secs(properties.duration().as_secs());
-
-                                // println!("{}", tag.picture_count());
-                                // let thing = tag.pictures();
-                                // for pic in tag.pictures() {
-                                //     println!("{:?}", pic.pic_type());
-                                // }
-
-                                let music_file = MusicFile {
-                                    album_artist: album_artist.clone(),
-                                    album: album.clone(),
-                                    track_number,
-                                    artist,
-                                    track_title,
-                                    duration,
-                                    date,
-                                    saved_path: saved_path.clone(),
-                                    uri: url.to_string(),
-                                    //metadata,
-                                    playing: false,
-                                    paused: false,
-                                    id: index,
-                                };
-
-                                match albums.iter_mut().find(|album| {
-                                    album.album == music_file.album
-                                        && album.album_artist == music_file.album_artist
-                                }) {
-                                    Some(album) => {
-                                        album.tracks.push(music_file.clone());
-                                    }
-                                    None => {
-
-                                        let cached_path: Option<String> = match tag.pictures().first() {
-                                            None => {
-                                                None
-                                            }
-                                            Some(picture) => {
-                                                let data = picture.data();
-
-                                                let home_dir = std::env::var("HOME").unwrap();
-                                                let path_to_write = format!("{}/.local/share/jams/covers/{}", home_dir, index);
-                                                
-                                                let dir = format!("{}/.local/share/jams/covers/", home_dir);
-                                                fs::create_dir_all(dir)
-                                                    .expect("TODO: panic message");
-
-                                                let mut file = fs::OpenOptions::new()
-                                                    .create(true) // To create a new file
-                                                    .write(true)
-                                                    // either use the ? operator or unwrap since it returns a Result
-                                                    .open(path_to_write.clone())
-                                                    .unwrap();
-
-                                                file.write_all(&data).unwrap();
-
-                                                Option::from(path_to_write)
-                                            }
-                                        };
-
-
-                                        let new_album = Album {
-                                            album_id: uuid::Uuid::new_v4(),
-                                            album_artist: album_artist.clone(),
-                                            album: album.clone(),
-                                            cached_cover_path: Option::from(cached_path),
-                                            tracks: vec![],
-                                        };
-                                        albums.push(new_album);
-                                    }
-                                }
-
-                                scanned_files.push(music_file);
-                            } else {
-                                println!("No tags found in file");
-                                continue;
-                            };
-                        }
-                        Err(err) => eprintln!("Failed to run discovery: {err:?}"),
-                    }
-                }
-            }
-            Err(entry_error) => {
-                println!("URL {} could not be read", url);
-            }
-        }
-    }
-
-    // https://rust-lang-nursery.github.io/rust-cookbook/algorithms/sorting.html#sort-a-vector-of-structs
-    // Sorts a vec of structs by its natural order (aka the order that was declared in the struct)
-    scanned_files.sort();
 }
 
 fn write_loc_to_config(url: &Url) {

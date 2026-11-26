@@ -3,3 +3,4 @@
 pub mod localization;
 
 pub mod views;
+pub mod library;
