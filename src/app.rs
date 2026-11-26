@@ -149,10 +149,10 @@ pub enum Message {
 
 /// Identifies a page in the application.
 pub enum Page {
-    Page1,
-    Page2,
-    Page3,
-    Page4,
+    AllMusic,
+    Songs,
+    Albums,
+    Artists,
 }
 
 #[derive(Default)]
@@ -243,23 +243,23 @@ impl Application for Jams {
 
         nav.insert()
             .text("All Music")
-            .data::<Page>(Page::Page1)
+            .data::<Page>(Page::AllMusic)
             .icon(icon_cache_get("music-note-symbolic", 16))
             .activate();
 
         nav.insert()
             .text("Songs")
-            .data::<Page>(Page::Page2)
+            .data::<Page>(Page::Songs)
             .icon(icon_cache_get("music-note-single-symbolic", 16));
 
         nav.insert()
             .text("Albums")
-            .data::<Page>(Page::Page3)
+            .data::<Page>(Page::Albums)
             .icon(icon_cache_get("library-music-symbolic", 16));
 
         nav.insert()
             .text("Artists")
-            .data::<Page>(Page::Page4)
+            .data::<Page>(Page::Artists)
             .icon(icon_cache_get("music-artist-symbolic", 16));
 
         let mut library = Library::new();
@@ -959,6 +959,19 @@ impl Application for Jams {
 
     /// Called when a nav item is selected.
     fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<Self::Message> {
+        if (self.nav.active() == id) {
+            match self.nav.data::<Page>(id) {
+                Some(Page::Albums) => {
+                    self.album_view_options.sub_view_current = AlbumSubView::Grid;
+                }
+                Some(Page::Artists) => {
+                    /* Nothing yet*/
+                }
+                _ => {}
+            }
+            return Task::none();
+        }
+
         // Activate the page in the model.
         self.nav.activate(id);
         self.update_titles()
@@ -1059,15 +1072,6 @@ fn build_grid (columns: usize, elements: Vec<Element<'_, Message>>) -> Grid<Mess
         }
     }
     grid
-}
-
-fn is_audio_file(path: &Path) -> std::io::Result<bool> {
-    let mut file = File::open(path)?;
-    let mut buf = [0; 1024]; // Read first KB for detection
-    file.read_exact(&mut buf)?;
-
-    let info = Infer::new();
-    Ok(info.is_audio(&buf))
 }
 
 fn send_value_as_str(v: &glib::SendValue) -> Option<String> {

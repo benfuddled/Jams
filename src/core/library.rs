@@ -1,7 +1,6 @@
 use infer::Infer;
 use lofty::file::{TaggedFile, TaggedFileExt};
 use lofty::prelude::{Accessor, ItemKey};
-use lofty::tag::Tag;
 use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -9,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 
 // OLD
@@ -37,7 +36,7 @@ pub struct AudioFile {
     pub(crate) artist: String,
     pub(crate) album: String,
     pub(crate) track_number: u16,
-    pub(crate) id: uuid::Uuid,
+    pub(crate) id: Uuid,
     pub(crate) album_artist: String,
     pub(crate) track_title: String,
     pub(crate) duration: Duration,
@@ -137,21 +136,21 @@ impl AudioFile {
 }
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Album {
-    pub(crate) id: uuid::Uuid,
+    pub(crate) id: Uuid,
     pub(crate) album_artist: String,
     pub(crate) album: String,
     pub(crate) cover_art_path: Option<String>,
-    pub(crate) tracks: Vec<uuid::Uuid>,
+    pub(crate) tracks: Vec<Uuid>,
 }
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Artist {
-    id: uuid::Uuid,
-    albums: Vec<uuid::Uuid>,
-    tracks: Vec<uuid::Uuid>,
+    id: Uuid,
+    albums: Vec<Uuid>,
+    tracks: Vec<Uuid>,
 }
 
 pub struct Player {
-    currently_playing_id: Option<uuid::Uuid>,
+    currently_playing_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
@@ -201,17 +200,17 @@ impl Library {
 }
 
 pub trait ArtistById {
-    fn artist_by_id(&self, id: uuid::Uuid) -> Option<&Artist>;
+    fn artist_by_id(&self, id: Uuid) -> Option<&Artist>;
 }
 
 impl ArtistById for Library {
-    fn artist_by_id(&self, id: uuid::Uuid) -> Option<&Artist> {
+    fn artist_by_id(&self, id: Uuid) -> Option<&Artist> {
         self.artists.iter().find(|artist| artist.id == id)
     }
 }
 
 pub trait AlbumById {
-    fn album_by_id(&self, id: uuid::Uuid) -> Option<&Album>;
+    fn album_by_id(&self, id: Uuid) -> Option<&Album>;
 }
 
 impl AlbumById for Library {
@@ -247,7 +246,7 @@ pub fn get_all_files(url: Url, library: &mut Library) {
                 }
             }
             Err(entry_error) => {
-                println!("URL {} could not be read", url);
+                println!("{}", entry_error);
             }
         }
     }
