@@ -10,7 +10,6 @@ use url::Url;
 use uuid::Uuid;
 use walkdir::WalkDir;
 
-
 // OLD
 // impl Default for MusicFile {
 //     fn default() -> Self {
@@ -43,7 +42,7 @@ pub struct AudioFile {
     date: String,
     saved_path: PathBuf,
     pub(crate) uri: String,
-    cover_art_path: Option<String>
+    cover_art_path: Option<String>,
 }
 
 impl AudioFile {
@@ -85,9 +84,7 @@ impl AudioFile {
         let duration = Duration::from_secs(properties.duration().as_secs());
 
         let cover_art_path: Option<String> = match tags.pictures().first() {
-            None => {
-                None
-            }
+            None => None,
             Some(picture) => {
                 let data = picture.data();
                 let file_name = format!("{}_{}_{}", artist.clone(), album.clone(), date.clone());
@@ -96,21 +93,28 @@ impl AudioFile {
 
                 match Path::new(&path_to_write).try_exists() {
                     Ok(true) => {
-                        println!("Cached album cover {} already exists, no write.", path_to_write)
+                        println!(
+                            "Cached album cover {} already exists, no write.",
+                            path_to_write
+                        )
                     }
                     Ok(false) => {
                         let dir = format!("{}/.local/share/jams/covers/", home_dir);
-                        fs::create_dir_all(dir)
-                            .expect("TODO: panic message");
+                        fs::create_dir_all(dir).expect("TODO: panic message");
 
-                        let mut file = fs::OpenOptions::new()
+                        match fs::OpenOptions::new()
                             .create(true) // To create a new file
                             .write(true)
                             // either use the ? operator or unwrap since it returns a Result
                             .open(path_to_write.clone())
-                            .unwrap();
-
-                        file.write_all(&data).unwrap();
+                        {
+                            Ok(mut file) => {
+                                file.write_all(&data).unwrap();
+                            }
+                            Err(e) => {
+                                println!("{}", e);
+                            }
+                        }
                     }
                     Err(e) => println!("couldn't determine: {e}"),
                 }
@@ -130,7 +134,7 @@ impl AudioFile {
             saved_path: path,
             uri: url.to_string(),
             id: Uuid::new_v4(),
-            cover_art_path
+            cover_art_path,
         }
     }
 }
@@ -167,14 +171,13 @@ impl Library {
             files: vec![],
             albums: vec![],
             artists: vec![],
-            current_track_id: Uuid::default()
+            current_track_id: Uuid::default(),
         }
     }
 
     pub fn ingest_file(&mut self, audio_file: AudioFile) {
         match self.albums.iter_mut().find(|album| {
-            album.album == audio_file.album
-                && album.album_artist == audio_file.album_artist
+            album.album == audio_file.album && album.album_artist == audio_file.album_artist
         }) {
             Some(album) => {
                 album.tracks.push(audio_file.id);
